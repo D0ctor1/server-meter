@@ -168,6 +168,6 @@ senzor → /api/monitoring → Nagios plugin → Nagios notifikace
 
 Stejná událost může vyvolat oba e-maily. Doporučení: server-meter e-mail pro sensor-specific odchylky, Nagios pro dostupnost služby. Žádná automatická synchronizace.
 
-Prahy pro shell plugin `check_server_meter.sh` čte z `/api/monitoring` (autorita je server-meter). Legacy `/api/nagios/check` dál používá `nagios.thresholds` — ty se mohou lišit, pokud je vědomě nastavíte jinak.
+Prahy a doporučený stav pro shell plugin `check_server_meter.sh` čte z `/api/monitoring` (autorita je server-meter). URL a heslo jsou ve skriptu pluginu, ne v extra Nagios conf souboru. Legacy `/api/nagios/check` dál používá `nagios.thresholds` — ty se mohou lišit, pokud je vědomě nastavíte jinak.
 
 Podrobnosti: [NAGIOS.md](NAGIOS.md).

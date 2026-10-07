@@ -1,66 +1,88 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Nagios Core plugin for server-meter.
-# Talks to GET /api/monitoring over HTTP. Does not import Python from
-# server-meter and does not require Python 3 on the Nagios host.
+# Self-contained: edit the configuration block below, then run with no arguments.
+# Requires: curl, sed, awk, grep, cut, printf.
 # Exit: 0=OK 1=WARNING 2=CRITICAL 3=UNKNOWN
-set -eu
-set +o xtrace
+#
+# This file holds the HTTP password. Install it mode 0700 owned by the Nagios
+# plugin user (typically nagios:nagios). Never enable shell tracing.
+
+# === server-meter plugin configuration ===
+SERVER_METER_URL="http://192.168.1.50:8080"
+SERVER_METER_USERNAME="admin"
+SERVER_METER_PASSWORD="CHANGE_ME"
+CONNECT_TIMEOUT=5
+REQUEST_TIMEOUT=10
+CURL_INSECURE=false
+# === end configuration ===
 
 STATE_OK=0
 STATE_WARNING=1
 STATE_CRITICAL=2
 STATE_UNKNOWN=3
 
-HOST=""
-PORT="8080"
-URL=""
-USER=""
-PASSWORD=""
-CONFFILE=""
-TIMEOUT="8"
+finish() {
+  code=$1
+  shift
+  printf '%s\n' "$*"
+  exit "$code"
+}
+
+sanitize() {
+  awk -v p="$SERVER_METER_PASSWORD" '
+    p == "" { print; next }
+    {
+      s = $0
+      while ((i = index(s, p)) > 0) {
+        s = substr(s, 1, i - 1) "***" substr(s, i + length(p))
+      }
+      print s
+    }
+  '
+}
 
 usage() {
   cat <<'EOF'
-Usage: check_server_meter.sh [-H host] [-p port] [-U url] [-u user] [-P password] [-f conffile] [-t timeout]
-       check_server_meter.sh <HOST> <PORT>
+Usage:
+  check_server_meter.sh
+  check_server_meter.sh -h|--help
 
-Credentials should come from /etc/nagios/private/server-meter.conf (mode 640),
-not from Nagios object files.
+Edit the configuration block at the top of this script, then run it with no
+arguments. Nagios should execute the script as-is.
+
+Configuration:
+  SERVER_METER_URL
+  SERVER_METER_USERNAME
+  SERVER_METER_PASSWORD
+  CONNECT_TIMEOUT
+  REQUEST_TIMEOUT
+  CURL_INSECURE
+
+Nagios exit codes:
+  0 OK
+  1 WARNING
+  2 CRITICAL
+  3 UNKNOWN
+
+This file contains the HTTP password. Keep mode 0700 (nagios:nagios).
+The plugin never prints the password, performance data, or curl errors.
 EOF
 }
 
-load_conf() {
-  local file="$1"
-  [ -r "$file" ] || return 0
-  local key val
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in
-      ''|\#*) continue ;;
-    esac
-    key="${line%%=*}"
-    val="${line#*=}"
-    key="$(printf '%s' "$key" | tr -d ' \t\r')"
-    val="$(printf '%s' "$val" | tr -d '\r')"
-    val="${val#\"}"
-    val="${val%\"}"
-    val="${val#\'}"
-    val="${val%\'}"
-    case "$key" in
-      USER|USERNAME|user|username) USER="${USER:-$val}" ;;
-      PASSWORD|password) PASSWORD="${PASSWORD:-$val}" ;;
-      HOST|host) HOST="${HOST:-$val}" ;;
-      PORT|port) PORT="${PORT:-$val}" ;;
-      URL|url) URL="${URL:-$val}" ;;
-      TIMEOUT|timeout) TIMEOUT="${TIMEOUT:-$val}" ;;
-    esac
-  done < "$file"
+json_string() {
+  printf '%s' "$1" | tr '\n' ' ' | sed -n 's/.*"'"$2"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | sed -n '1p'
 }
 
-finish() {
-  local code="$1"
-  local text="$2"
-  printf '%s\n' "$text"
-  exit "$code"
+json_number() {
+  printf '%s' "$1" | tr '\n' ' ' | sed -n 's/.*"'"$2"'"[[:space:]]*:[[:space:]]*\(-\{0,1\}[0-9][0-9.]*\).*/\1/p' | sed -n '1p'
+}
+
+json_bool() {
+  printf '%s' "$1" | tr '\n' ' ' | sed -n 's/.*"'"$2"'"[[:space:]]*:[[:space:]]*\(true\|false\|null\).*/\1/p' | sed -n '1p'
+}
+
+is_number() {
+  printf '%s' "$1" | grep -Eq '^-?[0-9]+([.][0-9]+)?$'
 }
 
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
@@ -68,206 +90,154 @@ if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   exit "$STATE_UNKNOWN"
 fi
 
-if [ "$#" -ge 1 ] && [ "${1#-}" = "$1" ]; then
-  HOST="$1"
-  shift
-  if [ "$#" -ge 1 ] && [ "${1#-}" = "$1" ]; then
-    PORT="$1"
-    shift
-  fi
+if [ "$#" -ne 0 ]; then
+  finish "$STATE_UNKNOWN" "UNKNOWN - this plugin takes no arguments; edit SERVER_METER_URL in the script. See --help."
 fi
 
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    -H) HOST="${2:-}"; shift 2 ;;
-    -p) PORT="${2:-}"; shift 2 ;;
-    -U) URL="${2:-}"; shift 2 ;;
-    -u) USER="${2:-}"; shift 2 ;;
-    -P) PASSWORD="${2:-}"; shift 2 ;;
-    -f) CONFFILE="${2:-}"; shift 2 ;;
-    -t) TIMEOUT="${2:-}"; shift 2 ;;
-    --help|-h) usage; exit "$STATE_UNKNOWN" ;;
-    *) finish "$STATE_UNKNOWN" "UNKNOWN - unexpected argument" ;;
-  esac
-done
-
-if [ -z "$CONFFILE" ]; then
-  for candidate in \
-    /etc/nagios/private/server-meter.conf \
-    /etc/nagios4/private/server-meter.conf \
-    /usr/local/nagios/etc/private/server-meter.conf
-  do
-    if [ -r "$candidate" ]; then
-      CONFFILE="$candidate"
-      break
-    fi
-  done
-fi
-if [ -n "$CONFFILE" ]; then
-  load_conf "$CONFFILE"
+if [ -z "$SERVER_METER_URL" ]; then
+  finish "$STATE_UNKNOWN" "UNKNOWN - SERVER_METER_URL is empty"
 fi
 
-if [ -z "$URL" ]; then
-  if [ -z "$HOST" ]; then
-    finish "$STATE_UNKNOWN" "UNKNOWN - host is required"
-  fi
-  URL="http://${HOST}:${PORT}/api/monitoring"
+if [ "$SERVER_METER_PASSWORD" = "CHANGE_ME" ] || [ -z "$SERVER_METER_PASSWORD" ]; then
+  finish "$STATE_UNKNOWN" "UNKNOWN - set SERVER_METER_PASSWORD in check_server_meter.sh"
 fi
 
 if ! command -v curl >/dev/null 2>&1; then
   finish "$STATE_UNKNOWN" "UNKNOWN - curl is not installed on the Nagios host"
 fi
 
-AUTH_ARGS=()
-if [ -n "$USER" ]; then
-  AUTH_ARGS=(-u "${USER}:${PASSWORD}")
-fi
-
-BODY="$(mktemp)"
-trap 'rm -f "$BODY"' EXIT
-
-set +e
-HTTP_CODE="$(curl -sS -o "$BODY" -w '%{http_code}' --max-time "$TIMEOUT" \
-  -H 'Accept: application/json' "${AUTH_ARGS[@]}" "$URL" 2>"${BODY}.err")"
-CURL_RC=$?
-set -e
-
-if [ "$CURL_RC" -ne 0 ]; then
-  finish "$STATE_CRITICAL" "CRITICAL - cannot reach server-meter"
-fi
-if [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ]; then
-  finish "$STATE_CRITICAL" "CRITICAL - HTTP ${HTTP_CODE} authenticating to server-meter"
-fi
-if [ "$HTTP_CODE" != "200" ]; then
-  finish "$STATE_CRITICAL" "CRITICAL - HTTP ${HTTP_CODE} contacting server-meter"
-fi
-
-JSON="$(cat "$BODY")"
-
-parse_with_python() {
-  local py="$1"
-  printf '%s' "$JSON" | "$py" - <<'PY'
-import json, sys
-raw = sys.stdin.read()
-try:
-    data = json.loads(raw)
-except Exception:
-    sys.stdout.write("PARSE_ERROR\n")
-    sys.exit(3)
-
-state = str(data.get("overall") or "UNKNOWN").upper()
-if state not in ("OK", "WARNING", "CRITICAL", "UNKNOWN"):
-    state = "UNKNOWN"
-sensor = data.get("sensor") or {}
-system = data.get("system") or {}
-thresholds = data.get("thresholds") or {}
-
-def fmt(value, digits):
-    if value is None:
-        return None
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    if digits == 0:
-        return str(int(round(number)))
-    return ("%." + str(digits) + "f") % number
-
-metrics = (
-    ("temperature", sensor.get("temperature"), "C", 1, "temperature"),
-    ("humidity", sensor.get("humidity"), "%", 1, "humidity"),
-    ("pressure", sensor.get("pressure"), "hPa", 1, "pressure"),
-    ("gas_resistance", sensor.get("gas_resistance"), "Ohm", 0, "gas_resistance"),
-    ("iaq", sensor.get("iaq"), "", 1, "iaq"),
-    ("eco2", sensor.get("eco2"), "ppm", 0, "eco2"),
-    ("bvoc", sensor.get("bvoc"), "ppm", 3, "bvoc"),
-    ("cpu_temp", system.get("cpu_temperature"), "C", 1, "cpu_temperature"),
-    ("ram", system.get("ram_usage_percent"), "%", 1, "ram_usage"),
-    ("sensor_age", sensor.get("age_seconds"), "s", 0, "sensor_unavailable"),
-)
-text = []
-perf = []
-for label, value, unit, digits, th_name in metrics:
-    shown = fmt(value, digits)
-    if shown is None:
-        continue
-    text.append("%s=%s%s" % (label, shown, unit))
-    spec = thresholds.get(th_name) or {}
-    warn = spec.get("warning_high")
-    crit = spec.get("critical_high")
-    warn_s = "" if warn is None else str(warn)
-    crit_s = "" if crit is None else str(crit)
-    perf.append("%s=%s;%s;%s" % (label, shown, warn_s, crit_s))
-sys.stdout.write(state + "\n")
-sys.stdout.write((" ".join(text) if text else "no sample") + "\n")
-sys.stdout.write(" ".join(perf) + "\n")
-PY
-}
-
-parse_with_jq() {
-  printf '%s' "$JSON" | jq -r '
-    (.overall // "UNKNOWN"),
-    (
-      [
-        (if .sensor.temperature != null then "temperature=\(.sensor.temperature)C" else empty end),
-        (if .sensor.humidity != null then "humidity=\(.sensor.humidity)%" else empty end),
-        (if .sensor.pressure != null then "pressure=\(.sensor.pressure)hPa" else empty end),
-        (if .sensor.gas_resistance != null then "gas_resistance=\(.sensor.gas_resistance)Ohm" else empty end),
-        (if .sensor.iaq != null then "iaq=\(.sensor.iaq)" else empty end),
-        (if .sensor.eco2 != null then "eco2=\(.sensor.eco2)ppm" else empty end),
-        (if .sensor.bvoc != null then "bvoc=\(.sensor.bvoc)ppm" else empty end),
-        (if .system.cpu_temperature != null then "cpu_temp=\(.system.cpu_temperature)C" else empty end),
-        (if .system.ram_usage_percent != null then "ram=\(.system.ram_usage_percent)%" else empty end),
-        (if .sensor.age_seconds != null then "sensor_age=\(.sensor.age_seconds)s" else empty end)
-      ] | if length == 0 then "no sample" else join(" ") end
-    ),
-    (
-      [
-        (if .sensor.temperature != null then "temperature=\(.sensor.temperature);\(.thresholds.temperature.warning_high // "");\(.thresholds.temperature.critical_high // "")" else empty end),
-        (if .sensor.humidity != null then "humidity=\(.sensor.humidity);\(.thresholds.humidity.warning_high // "");\(.thresholds.humidity.critical_high // "")" else empty end),
-        (if .sensor.pressure != null then "pressure=\(.sensor.pressure);\(.thresholds.pressure.warning_high // "");\(.thresholds.pressure.critical_high // "")" else empty end),
-        (if .sensor.gas_resistance != null then "gas_resistance=\(.sensor.gas_resistance);\(.thresholds.gas_resistance.warning_high // "");\(.thresholds.gas_resistance.critical_high // "")" else empty end),
-        (if .sensor.iaq != null then "iaq=\(.sensor.iaq);\(.thresholds.iaq.warning_high // "");\(.thresholds.iaq.critical_high // "")" else empty end),
-        (if .sensor.eco2 != null then "eco2=\(.sensor.eco2);\(.thresholds.eco2.warning_high // "");\(.thresholds.eco2.critical_high // "")" else empty end),
-        (if .sensor.bvoc != null then "bvoc=\(.sensor.bvoc);\(.thresholds.bvoc.warning_high // "");\(.thresholds.bvoc.critical_high // "")" else empty end),
-        (if .system.cpu_temperature != null then "cpu_temp=\(.system.cpu_temperature);\(.thresholds.cpu_temperature.warning_high // "");\(.thresholds.cpu_temperature.critical_high // "")" else empty end),
-        (if .system.ram_usage_percent != null then "ram=\(.system.ram_usage_percent);\(.thresholds.ram_usage.warning_high // "");\(.thresholds.ram_usage.critical_high // "")" else empty end),
-        (if .sensor.age_seconds != null then "sensor_age=\(.sensor.age_seconds);\(.thresholds.sensor_unavailable.warning_high // "");\(.thresholds.sensor_unavailable.critical_high // "")" else empty end)
-      ] | join(" ")
-    )
-  '
-}
-
-PARSED=""
-if command -v jq >/dev/null 2>&1; then
-  PARSED="$(parse_with_jq || true)"
-elif command -v python2 >/dev/null 2>&1; then
-  PARSED="$(parse_with_python python2 || true)"
-elif command -v python >/dev/null 2>&1; then
-  PARSED="$(parse_with_python python || true)"
-elif command -v python3 >/dev/null 2>&1; then
-  PARSED="$(parse_with_python python3 || true)"
-else
-  finish "$STATE_UNKNOWN" "UNKNOWN - install jq or python2 to parse JSON (do not install Python 3 only for this plugin)"
-fi
-
-if [ -z "$PARSED" ] || [ "$(printf '%s\n' "$PARSED" | head -n1)" = "PARSE_ERROR" ]; then
-  finish "$STATE_UNKNOWN" "UNKNOWN - invalid JSON from server-meter"
-fi
-
-STATE_WORD="$(printf '%s\n' "$PARSED" | sed -n '1p' | tr '[:lower:]' '[:upper:]')"
-TEXT="$(printf '%s\n' "$PARSED" | sed -n '2p')"
-PERF="$(printf '%s\n' "$PARSED" | sed -n '3p')"
-
-case "$STATE_WORD" in
-  OK) CODE="$STATE_OK" ;;
-  WARNING) CODE="$STATE_WARNING" ;;
-  CRITICAL) CODE="$STATE_CRITICAL" ;;
-  UNKNOWN) CODE="$STATE_UNKNOWN" ;;
-  *) CODE="$STATE_UNKNOWN"; STATE_WORD="UNKNOWN" ;;
+url=$SERVER_METER_URL
+url=${url%/}
+case "$url" in
+  */api/monitoring) ;;
+  *) url="$url/api/monitoring" ;;
 esac
 
-if [ -n "$PERF" ]; then
-  finish "$CODE" "${STATE_WORD} - ${TEXT} | ${PERF}"
+insecure_args=""
+if [ "$CURL_INSECURE" = "true" ] || [ "$CURL_INSECURE" = "True" ] || [ "$CURL_INSECURE" = "1" ]; then
+  insecure_args="--insecure"
 fi
-finish "$CODE" "${STATE_WORD} - ${TEXT}"
+
+set +e
+# shellcheck disable=SC2086
+raw=$(curl \
+  --silent \
+  --show-error \
+  --connect-timeout "$CONNECT_TIMEOUT" \
+  --max-time "$REQUEST_TIMEOUT" \
+  --user "$SERVER_METER_USERNAME:$SERVER_METER_PASSWORD" \
+  $insecure_args \
+  --header "Accept: application/json" \
+  --write-out "\n%{http_code}" \
+  "$url" 2>&1)
+curl_rc=$?
+set -e
+
+safe=$(printf '%s\n' "$raw" | sanitize)
+http_code=$(printf '%s\n' "$safe" | sed -n '$p')
+body=$(printf '%s\n' "$safe" | sed '$d')
+
+if [ "$curl_rc" -ne 0 ]; then
+  reason="connection failed"
+  case "$safe" in
+    *timed\ out*|*Timeout*|*timeout*) reason="connection timeout" ;;
+    *Could\ not\ resolve*|*resolve\ host*) reason="dns failure" ;;
+    *SSL*|*certificate*) reason="tls error" ;;
+    *Connection\ refused*) reason="connection refused" ;;
+  esac
+  finish "$STATE_CRITICAL" "CRITICAL - server-meter unreachable: $reason"
+fi
+
+if ! printf '%s' "$http_code" | grep -Eq '^[0-9]{3}$'; then
+  finish "$STATE_CRITICAL" "CRITICAL - server-meter unreachable"
+fi
+
+if [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; then
+  finish "$STATE_CRITICAL" "CRITICAL - HTTP $http_code authenticating to server-meter"
+fi
+
+if [ "$http_code" != "200" ]; then
+  finish "$STATE_CRITICAL" "CRITICAL - HTTP $http_code contacting server-meter"
+fi
+
+case "$body" in
+  *"{"*) ;;
+  *) finish "$STATE_UNKNOWN" "UNKNOWN - server-meter returned invalid monitoring data" ;;
+esac
+
+overall=$(json_string "$body" "overall")
+overall=$(printf '%s' "$overall" | tr '[:lower:]' '[:upper:]')
+
+case "$overall" in
+  OK) code=$STATE_OK ;;
+  WARNING) code=$STATE_WARNING ;;
+  CRITICAL) code=$STATE_CRITICAL ;;
+  UNKNOWN) code=$STATE_UNKNOWN ;;
+  *) finish "$STATE_UNKNOWN" "UNKNOWN - server-meter returned invalid monitoring data" ;;
+esac
+
+TEXT=""
+PERF=""
+
+add_item() {
+  label=$1
+  value=$2
+  unit=$3
+  warn=$4
+  crit=$5
+  text_name=$6
+  if [ -z "$value" ] || [ "$value" = "null" ]; then
+    return 0
+  fi
+  if ! is_number "$value"; then
+    return 0
+  fi
+  if [ -n "$TEXT" ]; then
+    TEXT="$TEXT "
+  fi
+  TEXT="$TEXT$text_name=$value$unit"
+  warn_s=""
+  crit_s=""
+  if is_number "$warn"; then
+    warn_s=$warn
+  fi
+  if is_number "$crit"; then
+    crit_s=$crit
+  fi
+  if [ -n "$PERF" ]; then
+    PERF="$PERF "
+  fi
+  PERF="$PERF$label=$value;$warn_s;$crit_s"
+}
+
+add_item temperature "$(json_number "$body" temperature_c)" "C" "$(json_number "$body" temperature_warning)" "$(json_number "$body" temperature_critical)" temperature
+add_item humidity "$(json_number "$body" humidity_percent)" "%" "$(json_number "$body" humidity_warning)" "$(json_number "$body" humidity_critical)" humidity
+add_item pressure "$(json_number "$body" pressure_hpa)" "hPa" "" "" pressure
+add_item gas_resistance "$(json_number "$body" gas_resistance_ohm)" "Ohm" "" "" gas_resistance
+add_item iaq "$(json_number "$body" iaq)" "" "$(json_number "$body" iaq_warning)" "$(json_number "$body" iaq_critical)" IAQ
+add_item iaq_accuracy "$(json_number "$body" iaq_accuracy)" "" "" "" iaq_accuracy
+add_item static_iaq "$(json_number "$body" static_iaq)" "" "" "" static_iaq
+add_item static_iaq_accuracy "$(json_number "$body" static_iaq_accuracy)" "" "" "" static_iaq_accuracy
+add_item eco2 "$(json_number "$body" eco2_ppm)" "ppm" "$(json_number "$body" eco2_warning)" "$(json_number "$body" eco2_critical)" eco2
+add_item bvoc "$(json_number "$body" bvoc_ppm)" "ppm" "$(json_number "$body" bvoc_warning)" "$(json_number "$body" bvoc_critical)" bvoc
+add_item cpu_temp "$(json_number "$body" cpu_temperature_c)" "C" "$(json_number "$body" cpu_temperature_warning)" "$(json_number "$body" cpu_temperature_critical)" cpu_temp
+add_item cpu_load "$(json_number "$body" cpu_load_percent)" "%" "" "" cpu_load
+add_item ram "$(json_number "$body" ram_used_percent)" "%" "$(json_number "$body" ram_warning)" "$(json_number "$body" ram_critical)" ram
+add_item sensor_age "$(json_number "$body" sensor_age_seconds)" "s" "$(json_number "$body" sensor_age_warning)" "$(json_number "$body" sensor_age_critical)" sensor_age
+
+available=$(json_bool "$body" sensor_available)
+prefix="server-meter reachable"
+if [ "$overall" != "OK" ]; then
+  prefix="server-meter"
+fi
+if [ "$available" = "false" ]; then
+  prefix="server-meter sensor unavailable"
+fi
+if [ -z "$TEXT" ]; then
+  TEXT="no sample"
+fi
+
+if [ -n "$PERF" ]; then
+  finish "$code" "$overall - $prefix, $TEXT | $PERF"
+fi
+finish "$code" "$overall - $prefix, $TEXT"

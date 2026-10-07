@@ -76,10 +76,15 @@ def test_monitoring_is_language_neutral(tmp_path, auth):
         blob = str(payload)
         assert "teplota" not in blob.lower()
         assert payload["overall"] in {"OK", "WARNING", "CRITICAL", "UNKNOWN"}
+        assert payload["status"] == payload["overall"]
         assert "temperature" in payload["sensor"]
+        assert "temperature_c" in payload
         assert "cpu_temperature" in payload["system"]
+        assert "cpu_load_percent" in payload
+        assert "ram_used_percent" in payload
         assert "thresholds" in payload
         assert payload["thresholds"]["temperature"]["warning_high"] == 45
+        assert payload["temperature_warning"] == 45
         assert "password" not in blob
 
 

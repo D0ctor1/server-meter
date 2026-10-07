@@ -2,21 +2,25 @@
 
 Nagios Core běží **typicky na jiném serveru** než Raspberry Pi. Kontroluje server-meter přes HTTP.
 
-**Globální Python 2.7 prostředí Nagiosu se nemění.** Do Nagios hostitele se Python 3 kvůli server-meter neinstaluje.
+**Globální Python 2.7 prostředí Nagiosu se nemění.** Do Nagios hostitele se Python 3 kvůli server-meter neinstaluje. Plugin **nepotřebuje jq**.
 
 ```text
 Nagios Core 4.4.5
        │
-       │ check_server_meter.sh  (curl + jq, fallback python2 json)
-       │ HTTP GET + Basic Auth
+       │ execute check_server_meter.sh   (žádné argumenty)
+       ▼
+check_server_meter.sh
+  URL + username + password + timeouty jsou VE SKRIPTU
+       │
+       │ curl + HTTP Basic Auth
        ▼
 Raspberry Pi 5  server-meter :8080
 GET /api/monitoring
 ```
 
-Preferovaný plugin: `scripts/check_server_meter.sh`. Credentials v `/etc/nagios/private/server-meter.conf` (mode **640**), **ne** v `define service`. Příklad objektů: `scripts/nagios/server-meter.cfg.example`.
+Celá konfigurace spojení je v `check_server_meter.sh`. **Žádný** `/etc/nagios/private/server-meter.conf` ani jiný extra soubor.
 
-Autorita prahů pro tento plugin je server-meter (`thresholds` v JSON). Performance data používá stejné WARNING/CRITICAL.
+Autorita stavu je server-meter (`overall` v JSON). Performance data nesou hodnoty a WARNING/CRITICAL prahy z téhož JSON.
 
 Legacy endpoint `GET /api/nagios/check` + `scripts/check_server_meter.py` zůstává. Používá `nagios.thresholds` v YAML — ty se mohou vědomě lišit od e-mailových prahů.
 
@@ -28,44 +32,61 @@ Tento dokument předpokládá **Nagios Core 4.4.5**. Cesty k `nagios.cfg` se li�
 
 ## Preferovaný plugin `check_server_meter.sh`
 
+Na **Nagios serveru** (ne na Raspberry Pi):
+
 ```bash
-sudo install -m 0755 scripts/check_server_meter.sh /usr/lib/nagios/plugins/check_server_meter.sh
-sudo mkdir -p /etc/nagios/private
-sudo install -m 640 -o nagios -g nagios scripts/nagios/server-meter.conf.example \
-  /etc/nagios/private/server-meter.conf
+sudo ./scripts/install_nagios_plugin.sh
 ```
 
-Upravte USER/PASSWORD. Ověření `$USER1$` v `resource.cfg` (často `/usr/lib/nagios/plugins` nebo `/usr/local/nagios/libexec`).
+Výchozí cesta: `/usr/lib/nagios/plugins/check_server_meter.sh` (upravitelná nahoře v instalátoru jako `PLUGIN_DIR`). Práva **0700**, vlastník `nagios:nagios`. Heslo je ve skriptu, proto nesmí být world-readable.
+
+Instalátor Python, jq ani `nagios.cfg` nemění. Při opakovaném spuštění aktualizuje jen tento plugin a **ponechá** existující URL/heslo.
+
+Upravte blok nahoře ve nainstalovaném skriptu:
 
 ```bash
-/usr/lib/nagios/plugins/check_server_meter.sh -H RPI_IP -p 8080 \
-  -f /etc/nagios/private/server-meter.conf
+SERVER_METER_URL="http://RPI_IP:8080"
+SERVER_METER_USERNAME="admin"
+SERVER_METER_PASSWORD="YOUR_PASSWORD"
+CONNECT_TIMEOUT=5
+REQUEST_TIMEOUT=10
+CURL_INSECURE=false
+```
+
+HTTPS: certifikát se ověřuje. Self-signed jen když `CURL_INSECURE=true`.
+
+Ruční test **bez argumentů**:
+
+```bash
+/usr/lib/nagios/plugins/check_server_meter.sh
 echo $?
 ```
 
-Očekávaný výstup (prahy z API):
+Očekávaný výstup:
 
 ```text
-OK - temperature=24.3C humidity=45.2% IAQ=42.1 ... | temperature=24.3;45;50 humidity=45.2;80;90 ...
+OK - server-meter reachable, temperature=24.3C humidity=45.2% IAQ=42.1 ... | temperature=24.3;45;50 humidity=45.2;80;90 ...
 ```
 
-Exit: `0` OK, `1` WARNING, `2` CRITICAL, `3` UNKNOWN. Nedostupnost HTTP → 2.
+Exit: `0` OK, `1` WARNING, `2` CRITICAL, `3` UNKNOWN. Nedostupnost HTTP → 2. Neplatné JSON → 3.
+
+Nagios potřebuje jen command bez parametrů:
 
 ```nagios
 define command {
     command_name    check_server_meter
-    command_line    $USER1$/check_server_meter.sh -H $HOSTADDRESS$ -p $ARG1$ -f /etc/nagios/private/server-meter.conf
+    command_line    /usr/lib/nagios/plugins/check_server_meter.sh
 }
 
 define service {
     use                 generic-service
     host_name           raspberrypi
     service_description Server Meter
-    check_command       check_server_meter!8080
+    check_command       check_server_meter
 }
 ```
 
-Plugin jen volá HTTP. Neimportuje `server_meter`, nečte filesystem Raspberry Pi.
+Plugin jen volá HTTP. Neimportuje `server_meter`, nečte filesystem Raspberry Pi, nepoužívá Python ani jq, neukládá odpověď API na disk.
 
 ---
 

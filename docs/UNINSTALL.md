@@ -133,6 +133,7 @@ Na Nagios hostiteli odstraňte `define service` / `define command` a soubor plug
 
 ```bash
 sudo rm -f /usr/local/nagios/libexec/check_server_meter.py
+sudo rm -f /usr/lib/nagios/plugins/check_server_meter.sh
 ```
 
 Pak `nagios -v …` a `systemctl reload` podle [NAGIOS.md](NAGIOS.md).

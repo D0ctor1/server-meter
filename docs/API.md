@@ -555,7 +555,9 @@ Aplikace **nemá**:
 
 ## GET /api/monitoring
 
-JSON pro Nagios shell plugin a další dohled. **Jazykově neutrální.** Autoritativní prahy jsou `thresholds` z notifikační konfigurace. SMTP heslo se neposílá.
+JSON pro Nagios shell plugin a další dohled. **Jazykově neutrální** (nezávislé na `web.locale`). Autoritativní Nagios stav je `overall` / `status` (`OK`/`WARNING`/`CRITICAL`/`UNKNOWN`) z notifikačního enginu. SMTP heslo se neposílá.
+
+Vedle vnořených `sensor` / `system` / `thresholds` / `alarms` endpoint vrací i ploché klíče, aby `check_server_meter.sh` uměl JSON parsovat bez `jq` a bez Pythonu: `temperature_c`, `humidity_percent`, `pressure_hpa`, `gas_resistance_ohm`, `iaq`, `iaq_accuracy`, `static_iaq`, `static_iaq_accuracy`, `eco2_ppm`, `bvoc_ppm`, `cpu_temperature_c`, `cpu_load_percent`, `ram_used_percent`, `uptime_seconds`, `sensor_age_seconds`, `sensor_available` a `*_warning` / `*_critical`.
 
 ### Autentizace
 
@@ -567,8 +569,6 @@ HTTP Basic Auth. Veřejný endpoint kvůli Nagiosu **neexistuje**.
 curl -u admin:YOUR_PASSWORD \
   http://192.168.1.50:8080/api/monitoring
 ```
-
-Klíče mimo jiné: `overall` (`OK`/`WARNING`/`CRITICAL`/`UNKNOWN`), `sensor.*`, `system.cpu_temperature`, `system.ram_usage_percent`, `alarms`, `thresholds`.
 
 ---
 
