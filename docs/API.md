@@ -4,7 +4,7 @@ server-meter vystavuje FastAPI endpointy na portu z YAML (`web.port`, výchozí 
 
 Tento dokument popisuje **skutečné** trasy v `server_meter/api/routes.py`, `server_meter/api/settings.py` a `server_meter/app.py`.
 
-`RPI_IP` a `YOUR_PASSWORD` jsou zástupné hodnoty. IP zjistíte `hostname -I`. Heslo je `web.auth.password` z `/etc/server-meter/config.yaml`.
+`RPI_IP` a `YOUR_PASSWORD` jsou zástupné hodnoty. IP zjistíte `hostname -I`. Heslo je účet v SQLite (první admin se jednou migrujte z `web.auth` v YAML).
 
 ---
 
@@ -21,15 +21,18 @@ Tento dokument popisuje **skutečné** trasy v `server_meter/api/routes.py`, `se
 | `GET /api/sensor` | HTTP Basic Auth |
 | `GET /api/nagios/check` | HTTP Basic Auth |
 | `GET /api/monitoring` | HTTP Basic Auth |
-| `GET /api/settings` | HTTP Basic Auth |
-| `PUT /api/settings` | HTTP Basic Auth |
-| `POST /api/settings/test-email` | HTTP Basic Auth |
+| `GET /api/me` | HTTP Basic Auth |
+| `GET /api/settings` | HTTP Basic Auth, jen `admin` |
+| `PUT /api/settings` | HTTP Basic Auth, jen `admin` |
+| `POST /api/settings/test-email` | HTTP Basic Auth, jen `admin` |
+| `GET/POST /api/admin/users` | HTTP Basic Auth, jen `admin` |
+| `GET/PUT/DELETE /api/admin/users/{id}` | HTTP Basic Auth, jen `admin` |
 | `GET /css/*`, `/js/*`, `/vendor/*` | **ne** (statické soubory) |
 | `GET /docs`, `/redoc`, `/openapi.json` | v production **vypnuto** (`404`) |
 
 JSON klíče a technické hodnoty API (`temperature`, `status: "warning"`, …) se **nemění** podle `web.locale`. Locale ovlivňuje jen HTML/JS dashboard.
 
-Implementace: `server_meter/api/auth.py` (`HTTPBasic`, `hmac.compare_digest`).
+Implementace: `server_meter/api/auth.py` + `server_meter/users.py` (Argon2id, SQLite). Role `user` dostane **403** na admin trasy.
 
 Když `web.auth.enabled: true` a chybí nebo nesouhlasí údaje:
 
@@ -572,9 +575,25 @@ curl -u admin:YOUR_PASSWORD \
 
 ---
 
+## GET /api/me
+
+HTTP Basic Auth. Vrátí `{ "username": "jan", "role": "user" }`. Role jsou jazykově neutrální (`admin` / `user`).
+
+## GET /api/admin/users
+
+Jen `role=admin` (jinak **403**). Seznam účtů bez `password_hash`.
+
+## POST /api/admin/users
+
+Tělo: `{ "username", "password", "role", "enabled" }`. Heslo se uloží jako Argon2.
+
+## GET / PUT / DELETE `/api/admin/users/{id}`
+
+Úprava a smazání. Prázdné heslo při PUT = beze změny. Posledního aktivního admina nelze smazat, deaktivovat ani změnit na `user` (**409**, `error: last_admin`).
+
 ## GET /api/settings
 
-SMTP a prahy pro webové Nastavení. `email.smtp.password` **chybí**; je tu `password_set`.
+Jen `role=admin`. SMTP a prahy pro webové Nastavení. `email.smtp.password` **chybí**; je tu `password_set`.
 
 ## PUT /api/settings
 

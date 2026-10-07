@@ -71,6 +71,9 @@ def test_cz_and_en_dictionaries_have_the_same_keys():
         "settings.title",
         "settings.test_email",
         "settings.disclaimer",
+        "users.add",
+        "users.last_admin",
+        "settings.tab.users",
     ):
         assert required in cz
 
@@ -92,6 +95,8 @@ def test_html_wires_i18n_attributes_and_login_form():
     assert 'id="login-overlay"' in INDEX
     assert 'id="settings-button"' in INDEX
     assert 'id="settings-overlay"' in INDEX
+    assert 'data-tab="users"' in INDEX
+    assert 'id="user-overlay"' in INDEX
     assert 'src="/js/settings.js?v=__ASSET__"' in INDEX
     assert "language-switch" not in INDEX
     assert "lang-switch" not in INDEX

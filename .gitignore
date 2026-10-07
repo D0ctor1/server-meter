@@ -20,6 +20,9 @@ htmlcov/
 # Runtime config with secrets — never commit a live password
 config/config.yaml
 config/*.lock
+config/users.db
+*.db-wal
+*.db-shm
 /etc/server-meter/
 
 # Editor / OS

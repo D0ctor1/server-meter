@@ -30,6 +30,7 @@ dependencies = [
     "pydantic>=2.9.0,<3.0.0",
     "PyYAML>=6.0.2,<7.0.0",
     "smbus2>=0.4.3,<0.6.0",
+    "argon2-cffi>=23.1.0,<26.0.0",
 ]
 
 [project.optional-dependencies]

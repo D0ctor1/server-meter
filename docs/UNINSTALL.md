@@ -7,15 +7,16 @@ Skript: `scripts/uninstall.sh`.
 - zastaví a disable službu
 - smaže `/etc/systemd/system/server-meter.service`
 - smaže `/opt/server-meter` (kód + venv)
-- **ponechá** `/etc/server-meter` (YAML s heslem)
+- **ponechá** `/etc/server-meter` (YAML)
+- **ponechá** `/var/lib/server-meter/users.db` (účty)
 - **ponechá** uživatele `server-meter`
 
 **S** `--purge`:
 
-- smaže i `/etc/server-meter`
+- smaže i `/etc/server-meter` a `/var/lib/server-meter`
 - pokusí se smazat systémového uživatele `server-meter`
 
-Na disku **nikdy nebyla** historie měření ke smazání.
+Na disku **nikdy nebyla** historie měření ke smazání. Účty v `users.db` nejsou sensor data.
 
 Hardware **nesundávejte** ze zapnutého Pi. Nejdřív vypněte systém, odpojte USB-C, pak vodiče.
 

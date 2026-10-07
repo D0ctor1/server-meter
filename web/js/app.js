@@ -325,8 +325,15 @@
         i18n.setLocale(status.application.locale);
       }
       const banner = $("password-banner");
+      const role = status.current_user && status.current_user.role === "admin" ? "admin" : "user";
+      if (window.ServerMeterSettings && window.ServerMeterSettings.setRole) {
+        window.ServerMeterSettings.setRole(role);
+      } else {
+        const gear = $("settings-button");
+        if (gear) gear.hidden = role !== "admin";
+      }
       if (banner) {
-        banner.hidden = !status.application.default_password_active;
+        banner.hidden = !(status.application.default_password_active && role === "admin");
       }
       const logout = $("logout-button");
       if (logout) {

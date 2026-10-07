@@ -21,6 +21,8 @@ web:
     enabled: true
     username: "admin"
     password: "CHANGE_ME"
+  # SQLite user accounts (not sensor history). Empty uses /var/lib/server-meter/users.db.
+  # users_db: "/var/lib/server-meter/users.db"
 
 sensor:
   type: "BME690"

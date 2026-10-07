@@ -12,6 +12,7 @@ from server_meter.api.nagios import NagiosState, evaluate_nagios
 from server_meter.api.settings import monitoring_payload
 from server_meter.models.measurement import iaq_accuracy_label
 from server_meter.service import MeterService
+from server_meter.users import AuthUser
 
 logger = logging.getLogger("server-meter")
 
@@ -26,13 +27,18 @@ def build_router(auth_dep) -> APIRouter:
         return {"status": "ok", "service": "server-meter"}
 
     @router.get("/api/status")
-    async def status(request: Request, _user: str = Depends(auth_dep)) -> dict[str, Any]:
+    async def status(request: Request, user: AuthUser = Depends(auth_dep)) -> dict[str, Any]:
         service: MeterService = request.app.state.service
         config = request.app.state.config
         sysm = service.system_snapshot()
         current = service.current
+        application = config.public_status_dict()
+        users = getattr(request.app.state, "users", None)
+        if users is not None:
+            application["default_password_active"] = users.has_factory_password()
         return {
-            "application": config.public_status_dict(),
+            "application": application,
+            "current_user": user.public_dict(),
             "uptime_seconds": round(service.uptime_seconds(), 1),
             "sensor": {
                 "status": service.sensor_status.value,
@@ -63,7 +69,7 @@ def build_router(auth_dep) -> APIRouter:
         }
 
     @router.get("/api/current")
-    async def current(request: Request, _user: str = Depends(auth_dep)) -> dict[str, Any]:
+    async def current(request: Request, _user: AuthUser = Depends(auth_dep)) -> dict[str, Any]:
         service: MeterService = request.app.state.service
         sample = service.current
         if sample is None:
@@ -80,7 +86,7 @@ def build_router(auth_dep) -> APIRouter:
     @router.get("/api/history")
     async def history(
         request: Request,
-        _user: str = Depends(auth_dep),
+        _user: AuthUser = Depends(auth_dep),
         seconds: Annotated[float | None, Query(gt=0, le=604800)] = None,
         limit: Annotated[int | None, Query(ge=1, le=20_000)] = None,
         since: Annotated[float | None, Query()] = None,
@@ -95,12 +101,12 @@ def build_router(auth_dep) -> APIRouter:
         }
 
     @router.get("/api/system")
-    async def system(request: Request, _user: str = Depends(auth_dep)) -> dict[str, Any]:
+    async def system(request: Request, _user: AuthUser = Depends(auth_dep)) -> dict[str, Any]:
         service: MeterService = request.app.state.service
         return service.system_snapshot().to_api_dict()
 
     @router.get("/api/sensor")
-    async def sensor(request: Request, _user: str = Depends(auth_dep)) -> dict[str, Any]:
+    async def sensor(request: Request, _user: AuthUser = Depends(auth_dep)) -> dict[str, Any]:
         service: MeterService = request.app.state.service
         return {
             "status": service.sensor_status.value,
@@ -115,11 +121,11 @@ def build_router(auth_dep) -> APIRouter:
         }
 
     @router.get("/api/monitoring")
-    async def monitoring(request: Request, _user: str = Depends(auth_dep)) -> dict[str, Any]:
+    async def monitoring(request: Request, _user: AuthUser = Depends(auth_dep)) -> dict[str, Any]:
         return monitoring_payload(request)
 
     @router.get("/api/nagios/check")
-    async def nagios_check(request: Request, _user: str = Depends(auth_dep)) -> PlainTextResponse:
+    async def nagios_check(request: Request, _user: AuthUser = Depends(auth_dep)) -> PlainTextResponse:
         service: MeterService = request.app.state.service
         config = request.app.state.config
         try:

@@ -14,6 +14,7 @@ from server_meter.config import AppConfig, ConfigError, NotificationsConfig
 from server_meter.config_io import save_notifications
 from server_meter.notification.models import METRIC_UNITS, AlarmState
 from server_meter.notification.smtp import SmtpError
+from server_meter.users import AuthUser
 
 THRESHOLD_KEYS = frozenset(
     {
@@ -37,17 +38,23 @@ KEEP_PASSWORD = frozenset({None, "", "********"})
 SETTINGS_KEYS = frozenset({"enabled", "max_queue_size", "email", "thresholds"})
 
 
-def build_settings_router(auth_dep) -> APIRouter:
+def build_settings_router(admin_dep) -> APIRouter:
     router = APIRouter()
 
     @router.get("/api/settings")
-    async def get_settings(request: Request, _user: str = Depends(auth_dep)) -> dict[str, Any]:
+    async def get_settings(
+        request: Request,
+        _admin: AuthUser = Depends(admin_dep),
+    ) -> dict[str, Any]:
         config: AppConfig = request.app.state.config
         notifier = request.app.state.service.notifier
         return public_settings(config, notifier)
 
     @router.put("/api/settings")
-    async def put_settings(request: Request, _user: str = Depends(auth_dep)) -> dict[str, Any]:
+    async def put_settings(
+        request: Request,
+        admin: AuthUser = Depends(admin_dep),
+    ) -> dict[str, Any]:
         payload = await request.json()
         if not isinstance(payload, dict):
             return JSONResponse(status_code=400, content={"error": "invalid settings payload"})
@@ -68,11 +75,14 @@ def build_settings_router(auth_dep) -> APIRouter:
         except ConfigError as exc:
             return JSONResponse(status_code=500, content={"error": str(exc)})
         request.app.state.service.notifier.replace_config(config)
-        logger.info("Notification configuration changed")
+        logger.info("%s changed notification configuration", admin.username)
         return public_settings(config, request.app.state.service.notifier)
 
     @router.post("/api/settings/test-email")
-    async def test_email(request: Request, _user: str = Depends(auth_dep)) -> dict[str, Any]:
+    async def test_email(
+        request: Request,
+        admin: AuthUser = Depends(admin_dep),
+    ) -> dict[str, Any]:
         notifier = request.app.state.service.notifier
         try:
             await asyncio.to_thread(notifier.send_test_now)
@@ -81,6 +91,7 @@ def build_settings_router(auth_dep) -> APIRouter:
         except Exception:
             logger.exception("test email failed")
             return {"ok": False, "error": "SMTP delivery failed"}
+        logger.info("%s sent a test email", admin.username)
         return {"ok": True}
 
     return router

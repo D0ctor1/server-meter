@@ -18,7 +18,6 @@ def _read_tree(path: Path) -> str:
 def test_no_database_or_history_libraries():
     text = _read_tree(SRC)
     forbidden = [
-        "sqlite3",
         "sqlalchemy",
         "psycopg",
         "influxdb",
@@ -30,6 +29,12 @@ def test_no_database_or_history_libraries():
     ]
     for token in forbidden:
         assert token not in text, f"forbidden persistence token {token}"
+    users_py = (SRC / "users.py").read_text(encoding="utf-8")
+    assert "sqlite3" in users_py
+    for folder in ("sensor", "storage", "monitoring"):
+        other = _read_tree(SRC / folder)
+        assert "sqlite3" not in other
+    assert "sqlite3" not in (SRC / "storage" / "ram_buffer.py").read_text(encoding="utf-8")
 
 
 def test_no_measurement_file_logging():
