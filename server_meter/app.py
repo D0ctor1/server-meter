@@ -18,6 +18,8 @@ from server_meter.api.routes import build_router, json_error
 from server_meter.config import AppConfig
 from server_meter.service import MeterService
 
+WEB_ASSET_VERSION = f"{__version__}.ui2"
+
 
 def resolve_web_root() -> Path:
     candidates = [
@@ -102,7 +104,11 @@ def create_app(config: AppConfig, service: MeterService | None = None) -> FastAP
         template = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
         locale = config.web.locale
         lang = "cs" if locale == "CZ" else "en"
-        html = template.replace("__LOCALE__", locale).replace("__LANG__", lang)
+        html = (
+            template.replace("__LOCALE__", locale)
+            .replace("__LANG__", lang)
+            .replace("__ASSET__", WEB_ASSET_VERSION)
+        )
         return HTMLResponse(content=html)
 
     if not config.web.health_public:

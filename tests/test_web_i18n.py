@@ -80,7 +80,7 @@ def test_frontend_uses_semantic_keys_not_hardcoded_ui_copy():
 
 
 def test_html_wires_i18n_attributes_and_login_form():
-    assert 'src="/js/i18n.js"' in INDEX
+    assert 'src="/js/i18n.js?v=__ASSET__"' in INDEX
     assert 'data-locale="__LOCALE__"' in INDEX
     assert 'lang="__LANG__"' in INDEX
     assert 'data-i18n="login.title"' in INDEX
@@ -199,6 +199,8 @@ def test_served_html_defaults_to_cz():
         assert 'data-locale="CZ"' in response.text
         assert 'lang="cs"' in response.text
         assert "__LOCALE__" not in response.text
+        assert "__ASSET__" not in response.text
+        assert "/js/i18n.js?v=" in response.text
 
 
 def test_served_html_uses_en_when_configured():
