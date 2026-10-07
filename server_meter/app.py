@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -17,7 +18,20 @@ from server_meter.api.routes import build_router, json_error
 from server_meter.config import AppConfig
 from server_meter.service import MeterService
 
-WEB_ROOT = Path(__file__).resolve().parent.parent / "web"
+
+def resolve_web_root() -> Path:
+    candidates = [
+        Path("/opt/server-meter/web"),
+        Path(__file__).resolve().parent.parent / "web",
+        Path.cwd() / "web",
+    ]
+    for path in candidates:
+        if (path / "index.html").is_file():
+            return path
+    return candidates[0]
+
+
+WEB_ROOT = resolve_web_root()
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -47,6 +61,13 @@ def create_app(config: AppConfig, service: MeterService | None = None) -> FastAP
     redoc_url = "/redoc" if config.web.api_docs_enabled else None
     openapi_url = "/openapi.json" if config.web.api_docs_enabled else None
 
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        if config.application.environment != "test":
+            app.state.service.start_background()
+        yield
+        await app.state.service.shutdown()
+
     app = FastAPI(
         title="server-meter",
         version=__version__,
@@ -54,6 +75,7 @@ def create_app(config: AppConfig, service: MeterService | None = None) -> FastAP
         docs_url=docs_url,
         redoc_url=redoc_url,
         openapi_url=openapi_url,
+        lifespan=lifespan,
     )
     app.state.config = config
     app.state.service = service or MeterService(config)
@@ -95,14 +117,5 @@ def create_app(config: AppConfig, service: MeterService | None = None) -> FastAP
     @app.exception_handler(Exception)
     async def _unhandled(_request: Request, _exc: Exception):
         return JSONResponse(status_code=500, content={"error": "internal server error"})
-
-    @app.on_event("startup")
-    async def _startup() -> None:
-        if config.application.environment != "test":
-            app.state.service.start_background()
-
-    @app.on_event("shutdown")
-    async def _shutdown() -> None:
-        await app.state.service.shutdown()
 
     return app

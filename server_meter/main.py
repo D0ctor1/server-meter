@@ -49,18 +49,24 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     app = create_app(config)
-    uv_config = uvicorn.Config(
-        app,
-        host=config.web.host,
-        port=config.web.port,
-        log_config=None,
-        access_log=config.logging.access_log,
-        timeout_keep_alive=10,
-        timeout_graceful_shutdown=12,
-        proxy_headers=True,
-        server_header=False,
-        date_header=False,
-    )
+    common = {
+        "app": app,
+        "host": config.web.host,
+        "port": config.web.port,
+        "log_config": None,
+        "access_log": config.logging.access_log,
+        "timeout_keep_alive": 10,
+        "proxy_headers": True,
+        "server_header": False,
+    }
+    try:
+        uv_config = uvicorn.Config(
+            **common,
+            timeout_graceful_shutdown=12,
+            date_header=False,
+        )
+    except TypeError:
+        uv_config = uvicorn.Config(**common)
     server = uvicorn.Server(uv_config)
 
     def _signal(signum: int, _frame: object) -> None:

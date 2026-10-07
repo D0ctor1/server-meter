@@ -120,7 +120,7 @@ class MeterService:
             self.stats.sensor_open = True
             self.sensor_status = SensorStatus.OK
             logger.info("sensor initialized (%s)", self.driver.name)
-        except SensorError as exc:
+        except Exception as exc:
             self.stats.sensor_open = False
             self.sensor_status = SensorStatus.UNAVAILABLE
             self.stats.last_error = str(exc)

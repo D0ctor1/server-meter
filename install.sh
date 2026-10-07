@@ -184,8 +184,15 @@ sync_tree() {
 
 setup_venv() {
   python3 -m venv "${PREFIX}/venv"
-  "${PREFIX}/venv/bin/pip" install --upgrade pip -q
+  "${PREFIX}/venv/bin/pip" install --upgrade pip setuptools -q
   "${PREFIX}/venv/bin/pip" install -r "${PREFIX}/requirements.txt" -q
+  # Install the local package into the venv so `python -m server_meter` works
+  # under systemd even if cwd is not on sys.path (Python 3.14).
+  "${PREFIX}/venv/bin/pip" install --no-deps --force-reinstall "${PREFIX}" -q
+  chmod -R a+rX "${PREFIX}/server_meter" "${PREFIX}/web" "${PREFIX}/config" || true
+  if ! PYTHONPATH="${PREFIX}" "${PREFIX}/venv/bin/python" -c "import server_meter, fastapi, uvicorn, yaml"; then
+    fail "Python environment" "venv cannot import server-meter. Check pip output above."
+  fi
 }
 
 enable_i2c() {
@@ -382,7 +389,6 @@ install_systemd_extras() {
   if [[ -f "${PREFIX}/docs/journald-volatile.conf" ]]; then
     cp "${PREFIX}/docs/journald-volatile.conf" \
       /etc/systemd/journald.conf.d/server-meter-volatile.conf
-    systemctl restart systemd-journald
   fi
   install -m 0644 "${PREFIX}/systemd/server-meter.service" \
     /etc/systemd/system/server-meter.service
@@ -399,26 +405,45 @@ install_systemd_extras() {
   ok
 }
 
+service_diagnostics() {
+  {
+    echo "--- systemctl status ---"
+    systemctl status server-meter.service --no-pager -l || true
+    echo "--- journal ---"
+    journalctl -u server-meter --no-pager -n 80 || true
+    echo "--- listeners ---"
+    ss -lntp 2>/dev/null | grep -E '8080|python' || echo "nothing on 8080"
+    echo "--- preflight ---"
+    PYTHONPATH="${PREFIX}" "${PREFIX}/venv/bin/python" -c \
+      "from server_meter.config import load_config; c=load_config('${CONFIG_FILE}'); print('config', c.web.host, c.web.port, c.sensor.driver)" \
+      || true
+  } 2>&1
+}
+
 start_service() {
   step 10 "Starting service"
-  systemctl restart server-meter.service
+  systemctl reset-failed server-meter.service 2>/dev/null || true
+  systemctl stop server-meter.service 2>/dev/null || true
+  sleep 1
+  if ! systemctl start server-meter.service; then
+    fail "systemd failed to start server-meter" "$(service_diagnostics)"
+  fi
   local i
-  for i in $(seq 1 30); do
-    if systemctl is-active --quiet server-meter.service; then
+  for i in $(seq 1 45); do
+    if curl -fsS http://127.0.0.1:8080/api/health 2>/dev/null | grep -q '"status":"ok"'; then
       ok
+      if [[ -f /etc/systemd/journald.conf.d/server-meter-volatile.conf ]]; then
+        systemctl restart systemd-journald 2>/dev/null || true
+      fi
       return
     fi
     sleep 1
   done
-  journalctl -u server-meter --no-pager -n 40 >&2 || true
-  fail "systemd failed to start server-meter" \
-    "Inspect: journalctl -u server-meter -n 80"
+  fail "HTTP /api/health failed" "$(service_diagnostics)"
 }
 
 write_netrc() {
-  local netrc="/run/server-meter/install.netrc"
-  mkdir -p /run/server-meter
-  chmod 0700 /run/server-meter
+  local netrc="/run/server-meter-install.netrc"
   "$(python_bin)" - "${CONFIG_FILE}" "${netrc}" <<'PY'
 import sys
 from pathlib import Path
@@ -439,18 +464,10 @@ test_api() {
   step 11 "Testing API"
   local netrc
   netrc="$(write_netrc)"
-  local i health current nagios hist
-  health=""
-  for i in $(seq 1 40); do
-    health="$(curl -fsS http://127.0.0.1:8080/api/health 2>/dev/null || true)"
-    if [[ "${health}" == *'"status":"ok"'* ]]; then
-      break
-    fi
-    sleep 0.5
-  done
-  if [[ "${health}" != *'"status":"ok"'* ]]; then
+  local current nagios hist
+  if ! curl -fsS http://127.0.0.1:8080/api/health 2>/dev/null | grep -q '"status":"ok"'; then
     rm -f "${netrc}"
-    fail "HTTP /api/health failed" "Service is not answering on port 8080."
+    fail "HTTP /api/health failed" "$(service_diagnostics)"
   fi
   current="$(curl -fsS --netrc-file "${netrc}" http://127.0.0.1:8080/api/current || true)"
   nagios="$(curl -fsS --netrc-file "${netrc}" -D - http://127.0.0.1:8080/api/nagios/check || true)"
