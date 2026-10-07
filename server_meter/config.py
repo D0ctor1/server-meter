@@ -1,6 +1,7 @@
 """YAML configuration loading and production validation.
 
-The application never writes this file back to disk.
+Sensor measurements and alarm state stay in RAM.
+Notification / SMTP settings may be written atomically from the Settings UI.
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, field_validator, model_validator
 
 # Absolute hard cap: even a broken YAML cannot grow RAM without bound.
 HISTORY_HARD_MAX_SAMPLES = 20_000
@@ -202,6 +203,173 @@ class LoggingConfig(BaseModel):
     access_log: bool = False
 
 
+class MetricThreshold(BaseModel):
+    """Anomaly thresholds for one metric. Not medical or safety limits."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    warning_high: float | None = None
+    critical_high: float | None = None
+    warning_low: float | None = None
+    critical_low: float | None = None
+    warning_clear_high: float | None = None
+    critical_clear_high: float | None = None
+    warning_clear_low: float | None = None
+    critical_clear_low: float | None = None
+    hysteresis: float | None = None
+    min_duration_seconds: float = Field(default=30.0, ge=0.0, le=3600.0)
+
+    @model_validator(mode="after")
+    def ordered_bounds(self) -> MetricThreshold:
+        if self.warning_high is not None and self.critical_high is not None:
+            if self.warning_high >= self.critical_high:
+                raise ValueError("warning_high must be < critical_high")
+        if self.warning_low is not None and self.critical_low is not None:
+            if self.warning_low <= self.critical_low:
+                raise ValueError("warning_low must be > critical_low")
+        return self
+
+    def clear_high(self, kind: str) -> float | None:
+        explicit = self.warning_clear_high if kind == "warning" else self.critical_clear_high
+        if explicit is not None:
+            return explicit
+        high = self.warning_high if kind == "warning" else self.critical_high
+        if high is None:
+            return None
+        delta = self.hysteresis if self.hysteresis is not None else _default_hysteresis(high)
+        return high - delta
+
+    def clear_low(self, kind: str) -> float | None:
+        explicit = self.warning_clear_low if kind == "warning" else self.critical_clear_low
+        if explicit is not None:
+            return explicit
+        low = self.warning_low if kind == "warning" else self.critical_low
+        if low is None:
+            return None
+        delta = self.hysteresis if self.hysteresis is not None else _default_hysteresis(low)
+        return low + delta
+
+
+def _default_hysteresis(magnitude: float) -> float:
+    abs_val = abs(magnitude)
+    if abs_val >= 100:
+        return max(1.0, abs_val * 0.04)
+    if abs_val >= 10:
+        return 2.0
+    if abs_val >= 1:
+        return 0.1
+    return 0.05
+
+
+def _th(
+    *,
+    enabled: bool = True,
+    warning_high: float | None = None,
+    critical_high: float | None = None,
+    warning_low: float | None = None,
+    critical_low: float | None = None,
+    hysteresis: float | None = None,
+    min_duration_seconds: float = 30.0,
+) -> MetricThreshold:
+    return MetricThreshold(
+        enabled=enabled,
+        warning_high=warning_high,
+        critical_high=critical_high,
+        warning_low=warning_low,
+        critical_low=critical_low,
+        hysteresis=hysteresis,
+        min_duration_seconds=min_duration_seconds,
+    )
+
+
+class NotificationThresholds(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    temperature: MetricThreshold = Field(
+        default_factory=lambda: _th(warning_high=45, critical_high=50, hysteresis=2, min_duration_seconds=30)
+    )
+    humidity: MetricThreshold = Field(
+        default_factory=lambda: _th(warning_high=80, critical_high=90, hysteresis=2, min_duration_seconds=30)
+    )
+    pressure: MetricThreshold = Field(
+        default_factory=lambda: _th(
+            enabled=False, warning_low=980, critical_low=960, warning_high=1040, critical_high=1060, hysteresis=5
+        )
+    )
+    gas_resistance: MetricThreshold = Field(
+        default_factory=lambda: _th(enabled=False, warning_low=20_000, critical_low=8_000, hysteresis=2_000)
+    )
+    iaq: MetricThreshold = Field(
+        default_factory=lambda: _th(warning_high=150, critical_high=250, hysteresis=10, min_duration_seconds=60)
+    )
+    iaq_accuracy: MetricThreshold = Field(
+        default_factory=lambda: _th(enabled=False, warning_low=1, critical_low=0, hysteresis=0, min_duration_seconds=300)
+    )
+    static_iaq: MetricThreshold = Field(
+        default_factory=lambda: _th(enabled=False, warning_high=150, critical_high=250, hysteresis=10, min_duration_seconds=60)
+    )
+    eco2: MetricThreshold = Field(
+        default_factory=lambda: _th(warning_high=1500, critical_high=2500, hysteresis=100, min_duration_seconds=60)
+    )
+    bvoc: MetricThreshold = Field(
+        default_factory=lambda: _th(warning_high=1.0, critical_high=2.0, hysteresis=0.1, min_duration_seconds=60)
+    )
+    cpu_temperature: MetricThreshold = Field(
+        default_factory=lambda: _th(warning_high=70, critical_high=80, hysteresis=2, min_duration_seconds=30)
+    )
+    cpu_usage: MetricThreshold = Field(
+        default_factory=lambda: _th(enabled=False, warning_high=85, critical_high=95, hysteresis=5, min_duration_seconds=60)
+    )
+    ram_usage: MetricThreshold = Field(
+        default_factory=lambda: _th(warning_high=70, critical_high=85, hysteresis=5, min_duration_seconds=60)
+    )
+    sensor_unavailable: MetricThreshold = Field(
+        default_factory=lambda: _th(warning_high=15, critical_high=30, hysteresis=5, min_duration_seconds=0)
+    )
+
+
+class SmtpConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    host: str = ""
+    port: int = Field(default=587, ge=1, le=65535)
+    security: Literal["none", "starttls", "tls"] = "starttls"
+    username: str = ""
+    password: str = ""
+    timeout_seconds: float = Field(default=15.0, ge=1.0, le=60.0)
+
+
+class EmailNotificationConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    enabled: bool = False
+    cooldown_seconds: int = Field(default=3600, ge=60, le=86400)
+    notify_recovery: bool = True
+    from_address: str = Field(default="", alias="from")
+    to: list[str] = Field(default_factory=list)
+    web_url: str = ""
+    smtp: SmtpConfig = Field(default_factory=SmtpConfig)
+
+    @field_validator("to", mode="before")
+    @classmethod
+    def coerce_recipients(cls, value: Any) -> list[str]:
+        if value is None or value == "":
+            return []
+        if isinstance(value, str):
+            return [part.strip() for part in value.split(",") if part.strip()]
+        return value
+
+
+class NotificationsConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    max_queue_size: int = Field(default=10, ge=1, le=50)
+    email: EmailNotificationConfig = Field(default_factory=EmailNotificationConfig)
+    thresholds: NotificationThresholds = Field(default_factory=NotificationThresholds)
+
+
 class AppConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -212,6 +380,8 @@ class AppConfig(BaseModel):
     memory_protection: MemoryProtectionConfig = Field(default_factory=MemoryProtectionConfig)
     nagios: NagiosConfig = Field(default_factory=NagiosConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)
+    _source_path: Path | None = PrivateAttr(default=None)
 
     @model_validator(mode="after")
     def production_safety(self) -> AppConfig:
@@ -268,6 +438,8 @@ class AppConfig(BaseModel):
             "auth_enabled": self.web.auth.enabled,
             "default_password_active": self.web.auth.password == DEFAULT_PASSWORD_PLACEHOLDER,
             "locale": self.web.locale,
+            "notifications_enabled": self.notifications.enabled,
+            "email_notifications_enabled": self.notifications.enabled and self.notifications.email.enabled,
         }
 
 
@@ -323,7 +495,9 @@ def _parse_yaml(path: Path) -> AppConfig:
     if not isinstance(data, dict):
         raise ConfigError("Configuration root must be a mapping")
     try:
-        return AppConfig.model_validate(data)
+        cfg = AppConfig.model_validate(data)
+        cfg._source_path = path
+        return cfg
     except ConfigError:
         raise
     except ValidationError as exc:

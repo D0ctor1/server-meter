@@ -39,6 +39,7 @@
       </div>
       <div class="top-actions">
         <div class="clock" id="local-clock">--:--:--</div>
+        <button type="button" id="settings-button" class="icon-btn" data-i18n-aria="settings.open" title="⚙" aria-label="Nastavení">⚙</button>
         <button type="button" id="logout-button" class="logout" data-i18n="nav.logout">Odhlásit</button>
       </div>
     </header>
@@ -95,8 +96,108 @@
     </footer>
   </div>
 
+  <div id="settings-overlay" class="settings-overlay" hidden>
+    <div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <header class="settings-head">
+        <h1 id="settings-title" data-i18n="settings.title">Nastavení</h1>
+        <button type="button" id="settings-close" class="icon-btn" data-i18n-aria="settings.close" aria-label="Zavřít">×</button>
+      </header>
+      <p class="hint settings-disclaimer" data-i18n="settings.disclaimer">Výchozí hodnoty slouží k detekci výrazných odchylek a nejsou zdravotními limity.</p>
+      <form id="settings-form">
+        <section class="settings-section">
+          <h2 data-i18n="settings.notifications">Notifikace</h2>
+          <label class="check-row">
+            <input id="notify-enabled" type="checkbox">
+            <span data-i18n="settings.master">Hlavní vypínač notifikací</span>
+          </label>
+          <label class="check-row">
+            <input id="notify-email-enabled" type="checkbox">
+            <span data-i18n="settings.email_enabled">E-mailové notifikace</span>
+          </label>
+          <label class="check-row">
+            <input id="notify-recovery" type="checkbox">
+            <span data-i18n="settings.recovery">E-mail při návratu do NORMAL</span>
+          </label>
+          <label>
+            <span data-i18n="settings.cooldown">Cooldown mezi e-maily (s)</span>
+            <input id="notify-cooldown" type="number" min="60" max="86400" step="1">
+          </label>
+        </section>
+
+        <section class="settings-section">
+          <h2 data-i18n="settings.smtp">SMTP</h2>
+          <label>
+            <span data-i18n="settings.smtp_host">SMTP server</span>
+            <input id="smtp-host" type="text" autocomplete="off">
+          </label>
+          <label>
+            <span data-i18n="settings.smtp_port">Port</span>
+            <input id="smtp-port" type="number" min="1" max="65535" step="1">
+          </label>
+          <label>
+            <span data-i18n="settings.smtp_security">Zabezpečení</span>
+            <select id="smtp-security">
+              <option value="none" data-i18n="settings.smtp_security_none">Žádné</option>
+              <option value="starttls" data-i18n="settings.smtp_security_starttls">STARTTLS</option>
+              <option value="tls" data-i18n="settings.smtp_security_tls">TLS</option>
+            </select>
+          </label>
+          <label>
+            <span data-i18n="settings.smtp_username">Uživatelské jméno</span>
+            <input id="smtp-username" type="text" autocomplete="off">
+          </label>
+          <label>
+            <span data-i18n="settings.smtp_password">Heslo</span>
+            <input id="smtp-password" type="password" autocomplete="new-password" data-i18n-placeholder="settings.smtp_password_hint">
+          </label>
+          <label>
+            <span data-i18n="settings.smtp_from">Odesílatel</span>
+            <input id="smtp-from" type="email" autocomplete="off">
+          </label>
+          <label>
+            <span data-i18n="settings.smtp_to">Příjemce</span>
+            <input id="smtp-to" type="text" autocomplete="off" data-i18n-placeholder="settings.smtp_to_hint">
+          </label>
+          <label>
+            <span data-i18n="settings.web_url">URL server-meter</span>
+            <input id="smtp-web-url" type="url" autocomplete="off">
+          </label>
+        </section>
+
+        <section class="settings-section">
+          <h2 data-i18n="settings.thresholds">Prahové hodnoty</h2>
+          <p class="hint" data-i18n="settings.air_note">IAQ, eCO₂ a bVOC jsou indikátory kvality vzduchu z BME690/BSEC, nikoliv certifikované měření škodlivin.</p>
+          <div class="threshold-wrap">
+            <table class="threshold-table">
+              <thead>
+                <tr>
+                  <th data-i18n="settings.col.metric">Metrika</th>
+                  <th data-i18n="settings.col.enabled">Zapnuto</th>
+                  <th data-i18n="settings.col.warning">WARNING</th>
+                  <th data-i18n="settings.col.critical">CRITICAL</th>
+                  <th data-i18n="settings.col.warning_low">WARNING low</th>
+                  <th data-i18n="settings.col.critical_low">CRITICAL low</th>
+                  <th data-i18n="settings.col.hysteresis">Hystereze</th>
+                  <th data-i18n="settings.col.duration">Trvání</th>
+                </tr>
+              </thead>
+              <tbody id="threshold-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <p id="settings-status" class="settings-status" role="status" hidden></p>
+        <div class="settings-actions">
+          <button type="button" id="settings-test" class="secondary-btn" data-i18n="settings.test_email">Odeslat testovací email</button>
+          <button type="submit" id="settings-save" data-i18n="settings.save">Uložit</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="/vendor/chart.umd.min.js?v=__ASSET__"></script>
   <script src="/js/i18n.js?v=__ASSET__"></script>
   <script src="/js/app.js?v=__ASSET__"></script>
+  <script src="/js/settings.js?v=__ASSET__"></script>
 </body>
 </html>

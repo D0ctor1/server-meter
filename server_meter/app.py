@@ -15,10 +15,11 @@ from starlette.types import ASGIApp
 from server_meter import __version__
 from server_meter.api.auth import require_auth
 from server_meter.api.routes import build_router, json_error
+from server_meter.api.settings import build_settings_router
 from server_meter.config import AppConfig
 from server_meter.service import MeterService
 
-WEB_ASSET_VERSION = f"{__version__}.ui2"
+WEB_ASSET_VERSION = f"{__version__}.ui3"
 
 
 def resolve_web_root() -> Path:
@@ -85,6 +86,7 @@ def create_app(config: AppConfig, service: MeterService | None = None) -> FastAP
 
     auth_dep = require_auth(config)
     app.include_router(build_router(auth_dep))
+    app.include_router(build_settings_router(auth_dep))
 
     if WEB_ROOT.is_dir():
         vendor = WEB_ROOT / "vendor"

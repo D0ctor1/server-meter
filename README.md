@@ -115,9 +115,10 @@ sudo ./uninstall.sh
 ## What you get
 
 - dashboard (temperature, humidity, pressure, gas, IAQ, eCO2, bVOC, Pi CPU/RAM)
-- REST API
-- Nagios Core endpoint `GET /api/nagios/check`
-- history **only in RAM** (empty after reboot — by design)
+- Settings (gear) for SMTP / email anomaly alerts
+- REST API including `GET /api/monitoring`
+- Nagios Core: `scripts/check_server_meter.sh` (curl, no Python 3 on the Nagios host)
+- history and alarm state **only in RAM** (empty after reboot — by design)
 
 ## Bosch BSEC (IAQ)
 
@@ -135,6 +136,7 @@ Without the library, temperature / humidity / pressure / gas still work; IAQ, eC
 | [docs/BME690-BSEC.md](docs/BME690-BSEC.md) | BSEC license / ARM64 library |
 | [docs/WEB-INTERFACE.md](docs/WEB-INTERFACE.md) | Dashboard |
 | [docs/API.md](docs/API.md) | REST |
+| [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md) | Email alerts, SMTP, thresholds |
 | [docs/NAGIOS.md](docs/NAGIOS.md) | Nagios Core 4.4.5 (on another host) |
 | [docs/SYSTEMD.md](docs/SYSTEMD.md) | Service / journald |
 | [docs/STORAGE-POLICY.md](docs/STORAGE-POLICY.md) | RAM-only policy |

@@ -14,6 +14,7 @@ from tests.conftest import make_config
 ROOT = Path(__file__).resolve().parent.parent
 I18N_JS = (ROOT / "web" / "js" / "i18n.js").read_text(encoding="utf-8")
 APP_JS = (ROOT / "web" / "js" / "app.js").read_text(encoding="utf-8")
+SETTINGS_JS = (ROOT / "web" / "js" / "settings.js").read_text(encoding="utf-8")
 INDEX = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
 CSS = (ROOT / "web" / "css" / "style.css").read_text(encoding="utf-8")
 
@@ -67,6 +68,9 @@ def test_cz_and_en_dictionaries_have_the_same_keys():
         "dashboard.current_values",
         "error.load_current",
         "sensor.unavailable_message",
+        "settings.title",
+        "settings.test_email",
+        "settings.disclaimer",
     ):
         assert required in cz
 
@@ -86,6 +90,9 @@ def test_html_wires_i18n_attributes_and_login_form():
     assert 'data-i18n="login.title"' in INDEX
     assert 'data-i18n="dashboard.current_values"' in INDEX
     assert 'id="login-overlay"' in INDEX
+    assert 'id="settings-button"' in INDEX
+    assert 'id="settings-overlay"' in INDEX
+    assert 'src="/js/settings.js?v=__ASSET__"' in INDEX
     assert "language-switch" not in INDEX
     assert "lang-switch" not in INDEX
 
@@ -94,6 +101,7 @@ def test_used_translation_keys_exist():
     keys = _keys(_section("CZ"))
     used = set(re.findall(r'data-i18n(?:-html|-placeholder|-aria)?="([a-z0-9_.]+)"', INDEX))
     used |= set(re.findall(r'\bt\(\s*"([a-z0-9_.]+)"', APP_JS))
+    used |= set(re.findall(r'\bt\(\s*"([a-z0-9_.]+)"', SETTINGS_JS))
     used |= set(re.findall(r'(?:labelKey|helpKey):\s*"([a-z0-9_.]+)"', APP_JS))
     missing = sorted(key for key in used if key not in keys)
     assert missing == []
@@ -201,6 +209,7 @@ def test_served_html_defaults_to_cz():
         assert "__LOCALE__" not in response.text
         assert "__ASSET__" not in response.text
         assert "/js/i18n.js?v=" in response.text
+        assert "/js/settings.js?v=" in response.text
 
 
 def test_served_html_uses_en_when_configured():

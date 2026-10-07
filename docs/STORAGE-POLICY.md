@@ -39,12 +39,12 @@ Statické, spravované operátorem. Aplikace to za běhu **nepřepisuje**:
 | Zdrojový kód server-meter | `/opt/server-meter/server_meter/` |
 | Statický frontend | `/opt/server-meter/web/` |
 | Python venv | `/opt/server-meter/venv/` |
-| YAML konfigurace | `/etc/server-meter/config.yaml` |
+| YAML konfigurace (včetně SMTP) | `/etc/server-meter/config.yaml` |
 | systemd unit | `/etc/systemd/system/server-meter.service` |
 | BSEC `.so` (volitelně) | `/opt/server-meter/lib/libalgobsec.so` |
 | Dokumentace | `/opt/server-meter/docs/` |
 
-Zápis na SD probíhá při **instalaci / upgradu / úpravě YAML**, ne při každém vzorku.
+Zápis na SD probíhá při **instalaci / upgradu / uložení Settings (SMTP/prahy)**, ne při každém vzorku. Stav alarmu a historie měření zůstávají v RAM.
 
 ---
 
@@ -58,6 +58,7 @@ Zápis na SD probíhá při **instalaci / upgradu / úpravě YAML**, ne při ka�
 | statistiky smyčky | `RuntimeStats` | vynulované |
 | memory pressure | `MemoryProtector` | vynulované |
 | CPU usage delta | `SystemMonitor._prev_cpu` | vynulované |
+| stav alarmu / e-mailová fronta | `NotificationEngine` | vynulované |
 
 BSEC `persist_state: true` konfigurace **odmítne** (`ConfigError`). Wrapper **nevolá** `bsec_get_state`.
 

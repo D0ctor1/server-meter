@@ -2,17 +2,70 @@
 
 Nagios Core běží **typicky na jiném serveru** než Raspberry Pi. Kontroluje server-meter přes HTTP.
 
+**Globální Python 2.7 prostředí Nagiosu se nemění.** Do Nagios hostitele se Python 3 kvůli server-meter neinstaluje.
+
 ```text
-Nagios server
+Nagios Core 4.4.5
        │
+       │ check_server_meter.sh  (curl + jq, fallback python2 json)
        │ HTTP GET + Basic Auth
        ▼
-Raspberry Pi 5
-server-meter  (port 8080)
-GET /api/nagios/check
+Raspberry Pi 5  server-meter :8080
+GET /api/monitoring
 ```
 
+Preferovaný plugin: `scripts/check_server_meter.sh`. Credentials v `/etc/nagios/private/server-meter.conf` (mode **640**), **ne** v `define service`. Příklad objektů: `scripts/nagios/server-meter.cfg.example`.
+
+Autorita prahů pro tento plugin je server-meter (`thresholds` v JSON). Performance data používá stejné WARNING/CRITICAL.
+
+Legacy endpoint `GET /api/nagios/check` + `scripts/check_server_meter.py` zůstává. Používá `nagios.thresholds` v YAML — ty se mohou vědomě lišit od e-mailových prahů.
+
+server-meter **neposílá e-mail Nagiosu**. Nagios má vlastní notifikace. Stejná událost může vyvolat e-mail z obou systémů; synchronizace neexistuje. Viz [NOTIFICATIONS.md](NOTIFICATIONS.md).
+
 Tento dokument předpokládá **Nagios Core 4.4.5**. Cesty k `nagios.cfg` se liší podle toho, jestli jste Core kompilovali ze zdroje, nebo použili balíček distro.
+
+---
+
+## Preferovaný plugin `check_server_meter.sh`
+
+```bash
+sudo install -m 0755 scripts/check_server_meter.sh /usr/lib/nagios/plugins/check_server_meter.sh
+sudo mkdir -p /etc/nagios/private
+sudo install -m 640 -o nagios -g nagios scripts/nagios/server-meter.conf.example \
+  /etc/nagios/private/server-meter.conf
+```
+
+Upravte USER/PASSWORD. Ověření `$USER1$` v `resource.cfg` (často `/usr/lib/nagios/plugins` nebo `/usr/local/nagios/libexec`).
+
+```bash
+/usr/lib/nagios/plugins/check_server_meter.sh -H RPI_IP -p 8080 \
+  -f /etc/nagios/private/server-meter.conf
+echo $?
+```
+
+Očekávaný výstup (prahy z API):
+
+```text
+OK - temperature=24.3C humidity=45.2% IAQ=42.1 ... | temperature=24.3;45;50 humidity=45.2;80;90 ...
+```
+
+Exit: `0` OK, `1` WARNING, `2` CRITICAL, `3` UNKNOWN. Nedostupnost HTTP → 2.
+
+```nagios
+define command {
+    command_name    check_server_meter
+    command_line    $USER1$/check_server_meter.sh -H $HOSTADDRESS$ -p $ARG1$ -f /etc/nagios/private/server-meter.conf
+}
+
+define service {
+    use                 generic-service
+    host_name           raspberrypi
+    service_description Server Meter
+    check_command       check_server_meter!8080
+}
+```
+
+Plugin jen volá HTTP. Neimportuje `server_meter`, nečte filesystem Raspberry Pi.
 
 ---
 
@@ -38,9 +91,9 @@ Vzdálený HTTP server **nemůže** nastavit unix exit code procesu na Nagios se
 | Tělo + hlavičky | stav kontroly (OK/WARNING/CRITICAL/UNKNOWN) |
 | Exit code pluginu | `0`/`1`/`2`/`3` procesu, který Nagios spustí **u sebe** |
 
-Plugin `scripts/check_server_meter.py` čte hlavičku `X-Nagios-State` (případně první slovo těla) a **sám** vrátí odpovídající exit code.
+Legacy plugin `scripts/check_server_meter.py` čte hlavičku `X-Nagios-State` (případně první slovo těla) a **sám** vrátí odpovídající exit code. Preferujte `check_server_meter.sh` + `/api/monitoring`, pokud na Nagios hostiteli nechcete Python 3.
 
-`check_http` standardně mapuje HTTP 200 → OK. WARNING i CRITICAL endpointu zůstanou HTTP 200, takže **`check_http` bez další logiky nerozliší** WARNING od OK. Proto je preferovaný Python plugin.
+`check_http` standardně mapuje HTTP 200 → OK. WARNING i CRITICAL endpointu zůstanou HTTP 200, takže **`check_http` bez další logiky nerozliší** WARNING od OK.
 
 ---
 

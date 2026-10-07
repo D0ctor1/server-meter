@@ -1,0 +1,33 @@
+# Example Nagios Core 4.4.5 objects for server-meter.
+# Install the shell plugin (no Python 3 required):
+#   sudo install -m 0755 scripts/check_server_meter.sh /usr/lib/nagios/plugins/check_server_meter.sh
+# Credentials live in /etc/nagios/private/server-meter.conf (mode 640), not here.
+#
+# $USER1$ is typically /usr/lib/nagios/plugins or /usr/local/nagios/libexec.
+# Confirm in resource.cfg.
+
+define command {
+    command_name    check_server_meter
+    command_line    $USER1$/check_server_meter.sh -H $HOSTADDRESS$ -p $ARG1$ -f /etc/nagios/private/server-meter.conf
+}
+
+define host {
+    use                     generic-host
+    host_name               raspberrypi
+    alias                   Raspberry Pi 5 server-meter
+    address                 192.168.1.50
+    max_check_attempts      5
+    check_period            24x7
+    notification_interval   30
+    notification_period     24x7
+}
+
+define service {
+    use                 generic-service
+    host_name           raspberrypi
+    service_description Server Meter
+    check_command       check_server_meter!8080
+    check_interval      1
+    retry_interval      1
+    max_check_attempts  3
+}

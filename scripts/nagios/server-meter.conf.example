@@ -1,0 +1,9 @@
+# Copy to /etc/nagios/private/server-meter.conf and chmod 640.
+# Owner: nagios:nagios (or nagios:nagios on nagios4 packages).
+# Do not put this password into Nagios object configuration.
+
+USER=admin
+PASSWORD=CHANGE_ME
+# PORT=8080
+# URL=http://192.168.1.50:8080/api/monitoring
+# TIMEOUT=8

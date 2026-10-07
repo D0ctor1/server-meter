@@ -485,12 +485,15 @@ write_config() {
     --bsec-config "${BSEC_CONFIG}" >/run/server-meter/write-config.out
   chown "root:${SERVICE_USER}" "${CONFIG_DIR}"
   chmod 0750 "${CONFIG_DIR}"
-  chmod 640 "${CONFIG_FILE}"
+  chmod 660 "${CONFIG_FILE}"
   chown "root:${SERVICE_USER}" "${CONFIG_FILE}"
   if ! su -s /bin/sh "${SERVICE_USER}" -c "test -r '${CONFIG_FILE}'"; then
     fail "Configuration not readable" \
       "${CONFIG_FILE} exists but user ${SERVICE_USER} cannot read it.
 $(stat -c '%a %U %G %n' "${CONFIG_DIR}" "${CONFIG_FILE}" 2>/dev/null || true)"
+  fi
+  if ! su -s /bin/sh "${SERVICE_USER}" -c "test -w '${CONFIG_FILE}'"; then
+    warn "Configuration is not writable by ${SERVICE_USER}; Settings UI cannot save SMTP (need 660)."
   fi
   ok
 }

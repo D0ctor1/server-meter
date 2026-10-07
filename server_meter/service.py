@@ -15,6 +15,7 @@ from server_meter.config import AppConfig
 from server_meter.models.measurement import Measurement, SensorHealth, SensorStatus
 from server_meter.monitoring.memory import MemoryPressure, MemoryProtector
 from server_meter.monitoring.system import SystemMetrics, SystemMonitor
+from server_meter.notification.engine import NotificationEngine
 from server_meter.sensor.base import SensorDriver
 from server_meter.sensor.exceptions import SensorError
 from server_meter.sensor.factory import create_sensor_driver
@@ -51,6 +52,7 @@ class MeterService:
         self.stats = RuntimeStats()
         self.current: Measurement | None = None
         self.sensor_status = SensorStatus.INITIALIZING
+        self.notifier = NotificationEngine(config)
         self._stop = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
         self._logged_down = False
@@ -72,6 +74,7 @@ class MeterService:
             return
         if self._task is None or self._task.done():
             self._task = loop.create_task(self.run_forever(), name="server-meter-loop")
+        self.notifier.start()
 
     async def run_forever(self) -> None:
         logger.info(
@@ -110,6 +113,7 @@ class MeterService:
                 self._task.cancel()
         else:
             await asyncio.to_thread(self._shutdown_sensor)
+        await self.notifier.stop()
         self.buffer.clear()
         self.current = None
         logger.info("shutdown complete; RAM history discarded (nothing written to disk)")
@@ -160,6 +164,7 @@ class MeterService:
         self.buffer.append(sample)
         self.buffer.enforce_limits(now=sample.timestamp)
         self.memory.maybe_protect()
+        self.notifier.observe(sample, self.system.snapshot(), self.sensor_status, self.sensor_age_seconds())
 
     def _on_sensor_error(self, exc: SensorError) -> None:
         self.stats.measurement_errors += 1
@@ -176,6 +181,7 @@ class MeterService:
                 exc,
             )
             self._logged_down = True
+        self.notifier.observe(None, self.system.snapshot(), self.sensor_status, self.sensor_age_seconds())
 
     def system_snapshot(self) -> SystemMetrics:
         return self.system.snapshot()

@@ -32,7 +32,7 @@ API příznak: `application.default_password_active` (boolean, heslo se neposíl
 
 TLS se v aplikaci **není**. Na nedůvěryhodné síti použijte reverse proxy — [SECURITY.md](SECURITY.md).
 
-Statické soubory `/css/style.css`, `/js/app.js`, `/js/i18n.js`, `/vendor/chart.umd.min.js` autentizaci **nevyžadují** (tak je to v `server_meter/app.py`).
+Statické soubory `/css/style.css`, `/js/app.js`, `/js/i18n.js`, `/js/settings.js`, `/vendor/chart.umd.min.js` autentizaci **nevyžadují** (tak je to v `server_meter/app.py`). API `/api/settings` a `/api/monitoring` Basic Auth **vyžadují**.
 
 ---
 
@@ -52,7 +52,9 @@ Chybějící klíč = `CZ`. Po změně `sudo systemctl restart server-meter`. P�
 
 ## Co dashboard skutečně zobrazuje
 
-Soubory: `web/index.html`, `web/js/app.js`, `web/js/i18n.js`. Texty UI jsou **česky** (`locale: CZ`) nebo **anglicky** (`locale: EN`).
+Soubory: `web/index.html`, `web/js/app.js`, `web/js/i18n.js`, `web/js/settings.js`. Texty UI jsou **česky** (`locale: CZ`) nebo **anglicky** (`locale: EN`).
+
+Vpravo nahoře je ikona **⚙**. Otevře stránku Nastavení / Settings (jen po přihlášení): notifikace, SMTP, prahy, testovací e-mail. SMTP heslo se do prohlížeče neposílá. Podrobnosti: [NOTIFICATIONS.md](NOTIFICATIONS.md).
 
 ### Stavový řádek (čtyři karty)
 
