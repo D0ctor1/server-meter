@@ -1,7 +1,7 @@
 # server-meter configuration
 # Copy to config.yaml or /etc/server-meter/config.yaml and edit.
-# The application NEVER writes this file back to disk.
-# Sensor history is RAM-only and is discarded on restart.
+# Sensor history and alarm state stay in RAM and are discarded on restart.
+# The Settings UI may atomically rewrite the notifications: block only.
 
 application:
   name: server-meter
@@ -82,3 +82,106 @@ logging:
   level: INFO
   # Access logs write to journald. Keep disabled to protect the SD card.
   access_log: false
+
+# Missing this entire block is valid: email stays OFF.
+# Thresholds detect significant deviations. They are NOT medical or
+# occupational safety limits. BME690/BSEC reports air-quality indicators,
+# not certified toxic-gas measurements.
+notifications:
+  enabled: false
+  max_queue_size: 10
+  email:
+    enabled: false
+    cooldown_seconds: 3600
+    notify_recovery: true
+    from: ""
+    to: []
+    web_url: ""
+    smtp:
+      host: ""
+      port: 587
+      security: "starttls"  # none | starttls | tls
+      username: ""
+      password: ""
+      timeout_seconds: 15
+  thresholds:
+    temperature:
+      enabled: true
+      warning_high: 45
+      critical_high: 50
+      hysteresis: 2
+      min_duration_seconds: 30
+    humidity:
+      enabled: true
+      warning_high: 80
+      critical_high: 90
+      hysteresis: 2
+      min_duration_seconds: 30
+    pressure:
+      enabled: false
+      warning_low: 980
+      critical_low: 960
+      warning_high: 1040
+      critical_high: 1060
+      hysteresis: 5
+      min_duration_seconds: 30
+    gas_resistance:
+      enabled: false
+      warning_low: 20000
+      critical_low: 8000
+      hysteresis: 2000
+      min_duration_seconds: 30
+    iaq:
+      enabled: true
+      warning_high: 150
+      critical_high: 250
+      hysteresis: 10
+      min_duration_seconds: 60
+    iaq_accuracy:
+      enabled: false
+      warning_low: 1
+      critical_low: 0
+      hysteresis: 0
+      min_duration_seconds: 300
+    static_iaq:
+      enabled: false
+      warning_high: 150
+      critical_high: 250
+      hysteresis: 10
+      min_duration_seconds: 60
+    eco2:
+      enabled: true
+      warning_high: 1500
+      critical_high: 2500
+      hysteresis: 100
+      min_duration_seconds: 60
+    bvoc:
+      enabled: true
+      warning_high: 1.0
+      critical_high: 2.0
+      hysteresis: 0.1
+      min_duration_seconds: 60
+    cpu_temperature:
+      enabled: true
+      warning_high: 70
+      critical_high: 80
+      hysteresis: 2
+      min_duration_seconds: 30
+    cpu_usage:
+      enabled: false
+      warning_high: 85
+      critical_high: 95
+      hysteresis: 5
+      min_duration_seconds: 60
+    ram_usage:
+      enabled: true
+      warning_high: 70
+      critical_high: 85
+      hysteresis: 5
+      min_duration_seconds: 60
+    sensor_unavailable:
+      enabled: true
+      warning_high: 15
+      critical_high: 30
+      hysteresis: 5
+      min_duration_seconds: 0

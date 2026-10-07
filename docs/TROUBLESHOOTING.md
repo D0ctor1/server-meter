@@ -321,7 +321,7 @@ journalctl -u server-meter --no-pager -n 100
 | password too short / empty | YAML `web.auth.password` (min. 8 znaků) |
 | `Configuration file not found` / `No configuration file found` | soubor může existovat; `/etc/server-meter` musí být **0750** `root:server-meter` |
 | `Configuration directory not accessible` | `sudo chown root:server-meter /etc/server-meter && sudo chmod 0750 /etc/server-meter` |
-| `Configuration file not readable` | `sudo chmod 640 /etc/server-meter/config.yaml && sudo chown root:server-meter /etc/server-meter/config.yaml` |
+| `Configuration file not readable` | `sudo chmod 660 /etc/server-meter/config.yaml && sudo chown root:server-meter /etc/server-meter/config.yaml` |
 | `Address already in use` | cizí proces na 8080 |
 | `Failed to start` limit burst | `sudo systemctl reset-failed server-meter` po opravě |
 
@@ -331,7 +331,7 @@ Když journal říká `Configuration file not found: /etc/server-meter/config.ya
 stat -c '%a %U %G %n' /etc/server-meter /etc/server-meter/config.yaml
 sudo chown root:server-meter /etc/server-meter
 sudo chmod 0750 /etc/server-meter
-sudo chmod 640 /etc/server-meter/config.yaml
+sudo chmod 660 /etc/server-meter/config.yaml
 sudo chown root:server-meter /etc/server-meter/config.yaml
 sudo systemctl reset-failed server-meter
 sudo systemctl start server-meter

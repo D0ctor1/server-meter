@@ -2,7 +2,7 @@
 
 server-meter vystavuje FastAPI endpointy na portu z YAML (`web.port`, výchozí **8080**).
 
-Tento dokument popisuje **skutečné** trasy v `server_meter/api/routes.py` a `server_meter/app.py`. Neexistují jiné REST cesty.
+Tento dokument popisuje **skutečné** trasy v `server_meter/api/routes.py`, `server_meter/api/settings.py` a `server_meter/app.py`.
 
 `RPI_IP` a `YOUR_PASSWORD` jsou zástupné hodnoty. IP zjistíte `hostname -I`. Heslo je `web.auth.password` z `/etc/server-meter/config.yaml`.
 
@@ -20,6 +20,10 @@ Tento dokument popisuje **skutečné** trasy v `server_meter/api/routes.py` a `s
 | `GET /api/system` | HTTP Basic Auth |
 | `GET /api/sensor` | HTTP Basic Auth |
 | `GET /api/nagios/check` | HTTP Basic Auth |
+| `GET /api/monitoring` | HTTP Basic Auth |
+| `GET /api/settings` | HTTP Basic Auth |
+| `PUT /api/settings` | HTTP Basic Auth |
+| `POST /api/settings/test-email` | HTTP Basic Auth |
 | `GET /css/*`, `/js/*`, `/vendor/*` | **ne** (statické soubory) |
 | `GET /docs`, `/redoc`, `/openapi.json` | v production **vypnuto** (`404`) |
 
@@ -537,12 +541,45 @@ V `config/config.mock.yaml` (`environment: development`, `api_docs_enabled: true
 
 Aplikace **nemá**:
 
-- `POST` / `PUT` / `DELETE` měření
+- `POST` / `PUT` / `DELETE` měření (historie je RAM-only)
 - `/api/export`
 - `/api/history/download`
 - websocket
 - GraphQL
 - Prometheus `/metrics`
-- zápis do SQLite
+- zápis měření do SQLite
 
-Pokud je v dokumentaci jinde, je to chyba — platný je tento seznam z `build_router()`.
+`PUT /api/settings` ukládá jen administrativní blok `notifications` (SMTP/prahy), nikoli vzorky senzoru.
+
+---
+
+## GET /api/monitoring
+
+JSON pro Nagios shell plugin a další dohled. **Jazykově neutrální** (nezávislé na `web.locale`). Autoritativní Nagios stav je `overall` / `status` (`OK`/`WARNING`/`CRITICAL`/`UNKNOWN`) z notifikačního enginu. SMTP heslo se neposílá.
+
+Vedle vnořených `sensor` / `system` / `thresholds` / `alarms` endpoint vrací i ploché klíče, aby `check_server_meter.sh` uměl JSON parsovat bez dalších nástrojů: `temperature_c`, `humidity_percent`, `pressure_hpa`, `gas_resistance_ohm`, `iaq`, `iaq_accuracy`, `static_iaq`, `static_iaq_accuracy`, `eco2_ppm`, `bvoc_ppm`, `cpu_temperature_c`, `cpu_load_percent`, `ram_used_percent`, `uptime_seconds`, `sensor_age_seconds`, `sensor_available` a `*_warning` / `*_critical`. Jeden endpoint stačí — plugin si z JSON vybere metriku podle `$ARG1$`.
+
+### Autentizace
+
+HTTP Basic Auth. Veřejný endpoint kvůli Nagiosu **neexistuje**.
+
+### Proveď
+
+```bash
+curl -u admin:YOUR_PASSWORD \
+  http://192.168.1.50:8080/api/monitoring
+```
+
+---
+
+## GET /api/settings
+
+SMTP a prahy pro webové Nastavení. `email.smtp.password` **chybí**; je tu `password_set`.
+
+## PUT /api/settings
+
+Stejné JSON (bez hesla, nebo s novým heslem). Prázdné heslo = ponechat stávající. Atomický zápis YAML + reload v procesu.
+
+## POST /api/settings/test-email
+
+Ověří SMTP (connect → auth → send). Subject `[server-meter][TEST]`. Odpověď `{ "ok": true }` nebo `{ "ok": false, "error": "…" }` bez hesla.

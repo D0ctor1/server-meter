@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from server_meter.api.nagios import NagiosState, evaluate_nagios
+from server_meter.api.settings import monitoring_payload
 from server_meter.models.measurement import iaq_accuracy_label
 from server_meter.service import MeterService
 
@@ -112,6 +113,10 @@ def build_router(auth_dep) -> APIRouter:
             "recoveries": service.stats.sensor_recoveries,
             "last_error": service.stats.last_error,
         }
+
+    @router.get("/api/monitoring")
+    async def monitoring(request: Request, _user: str = Depends(auth_dep)) -> dict[str, Any]:
+        return monitoring_payload(request)
 
     @router.get("/api/nagios/check")
     async def nagios_check(request: Request, _user: str = Depends(auth_dep)) -> PlainTextResponse:

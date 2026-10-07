@@ -1,0 +1,5 @@
+# Example / rendered Nagios objects live in server-meter.cfg in this directory.
+# Copy is not required: scripts/install_nagios_plugin.sh installs that file.
+#
+# Plugin connection settings are NOT here. Edit the installed
+# check_server_meter.sh (mode 0700).

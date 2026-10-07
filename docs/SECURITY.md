@@ -19,7 +19,8 @@ Pro nedůvěryhodnou síť nebo vzdálený přístup z internetu použijte **HTT
 | Porovnání | `hmac.compare_digest` na username i password |
 | Úložiště hesla | **pouze YAML**, plaintext |
 | Hash v YAML | **neexistuje** |
-| Logování hesla | kód heslo neloguje a nevrací v `/api/status` |
+| Logování hesla | kód heslo neloguje a nevrací v `/api/status` ani `/api/settings` |
+| SMTP heslo | jen YAML; API vrací `password_set` |
 
 Ve výchozím YAML:
 
@@ -50,10 +51,10 @@ Prohlížeč i `curl -u` posílají údaje v každém požadavku. Na Wi-Fi kavá
 
 ```text
 /etc/server-meter               mode 750   root:server-meter
-/etc/server-meter/config.yaml   mode 640   root:server-meter
+/etc/server-meter/config.yaml   mode 660   root:server-meter
 ```
 
-750 na adresáři = root a skupina `server-meter` smí adresář projít. 640 na YAML = root čte/píše, skupina `server-meter` čte, ostatní nic.
+750 na adresáři = root a skupina `server-meter` smí adresář projít. 660 na YAML = root i skupina `server-meter` čtou/píší, ostatní nic. Zápis skupinou je potřeba, aby Settings UI mohlo uložit SMTP bez SSH.
 
 Samotné 640 na souboru **nestačí**: když je `/etc/server-meter` `root:root` 0750, uživatel `server-meter` soubor „nevidí“ (`Path.is_file()` vrátí false → `Configuration file not found`).
 
@@ -64,14 +65,14 @@ stat -c '%a %U %G' /etc/server-meter /etc/server-meter/config.yaml
 sudo -u server-meter test -r /etc/server-meter/config.yaml && echo readable
 ```
 
-Očekávaný výsledek: `750 root server-meter` a `640 root server-meter`, plus `readable`.
+Očekávaný výsledek: `750 root server-meter` a `660 root server-meter`, plus `readable`.
 
 Úprava:
 
 ```bash
 sudo chown root:server-meter /etc/server-meter
 sudo chmod 0750 /etc/server-meter
-sudo chmod 640 /etc/server-meter/config.yaml
+sudo chmod 660 /etc/server-meter/config.yaml
 sudo chown root:server-meter /etc/server-meter/config.yaml
 ```
 

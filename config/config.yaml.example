@@ -1,5 +1,6 @@
 # Duplicate of config.example.yaml for operators who look for *.yaml.example
-# Copy, rename, and set a real password. The running process never writes YAML.
+# Copy, rename, and set a real password.
+# Sensor history stays in RAM. The Settings UI may rewrite notifications: only.
 
 application:
   name: server-meter
@@ -52,3 +53,8 @@ nagios:
 logging:
   level: INFO
   access_log: false
+
+notifications:
+  enabled: false
+  email:
+    enabled: false

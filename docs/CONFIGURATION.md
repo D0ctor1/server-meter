@@ -1,6 +1,6 @@
 # Konfigurace YAML
 
-Aplikace **čte** YAML jednou při startu a **nikdy ho zpět nezapisuje**.
+Aplikace **čte** YAML při startu. Měření a stav alarmu zůstávají v RAM. Blok `notifications` smí Settings UI atomicky zapsat zpět (temp + fsync + rename). Sensor history se do YAML nikdy nedává.
 
 ## Kde soubor leží
 
@@ -101,7 +101,27 @@ nagios:
 logging:
   level: INFO
   access_log: false
+
+notifications:
+  enabled: false
+  max_queue_size: 10
+  email:
+    enabled: false
+    cooldown_seconds: 3600
+    notify_recovery: true
+    from: ""
+    to: []
+    web_url: ""
+    smtp:
+      host: ""
+      port: 587
+      security: "starttls"
+      username: ""
+      password: ""
+      timeout_seconds: 15
 ```
+
+Kompletní výchozí prahy: [NOTIFICATIONS.md](NOTIFICATIONS.md). Chybějící blok `notifications` e-maily nespouští.
 
 `YOUR_PASSWORD` nahraďte vlastním heslem. `0x76` nahraďte výsledkem `i2cdetect`.
 
@@ -139,7 +159,7 @@ V `production`:
 | `auth.username` | uživatel | `admin` |
 | `auth.password` | heslo (jen YAML, ne zdrojáky) | `CHANGE_ME` |
 
-`web.locale` ovládá **jen texty dashboardu** (`CZ` = čeština, `EN` = angličtina). REST API a Nagios zůstávají jazykově neutrální. Pokud klíč v YAML chybí, aplikace použije `CZ` — existující instalace se nemění a soubor se nepřepisuje. Nepovolená hodnota (např. `DE`) službu nespustí:
+`web.locale` ovládá texty dashboardu **a e-mailových notifikací** (`CZ` = čeština, `EN` = angličtina). REST API a Nagios plugin zůstávají jazykově neutrální. Pokud klíč v YAML chybí, aplikace použije `CZ` — existující instalace se nemění a soubor se nepřepisuje. Nepovolená hodnota (např. `DE`) službu nespustí:
 
 ```text
 Invalid locale 'DE'.
@@ -227,6 +247,10 @@ Musí platit `warning < critical < emergency`.
 | `enabled` | `false` → endpoint vrací `UNKNOWN - Nagios checks disabled` |
 | `sensor_max_age_seconds` | CRITICAL když je poslední vzorek starší |
 | `thresholds.*` | CPU teplota, RAM %, IAQ, load1 — warning musí být **menší** než critical |
+
+### notifications
+
+Výchozí stav: `enabled: false` (upgrade bez překvapení). SMTP heslo je jen v YAML; API vrací `password_set`. Podrobnosti, hystereze, cooldown a tabulka prahů: [NOTIFICATIONS.md](NOTIFICATIONS.md).
 
 ### logging
 

@@ -47,3 +47,8 @@ nagios:
 logging:
   level: INFO
   access_log: false
+
+notifications:
+  enabled: false
+  email:
+    enabled: false

@@ -2,21 +2,180 @@
 
 Nagios Core běží **typicky na jiném serveru** než Raspberry Pi. Kontroluje server-meter přes HTTP.
 
+**Samotný Nagios Core grafy nevytváří.** Služba nese stav, aktuální hodnotu a performance data. Historii a grafy kreslí backend (PNP4Nagios, Nagiosgraph, …).
+
+**Globální prostředí Nagiosu se nemění.** Do Nagios hostitele se kvůli server-meter neinstaluje další interpret. Plugin používá `curl`, `sed`, `awk`, `grep`, `cut`, `printf`.
+
 ```text
-Nagios server
+Nagios Core 4.4.5
        │
-       │ HTTP GET + Basic Auth
+       │  check_server_meter.sh $ARG1$
        ▼
-Raspberry Pi 5
-server-meter  (port 8080)
-GET /api/nagios/check
+check_server_meter.sh     (jeden soubor, všechny služby)
+  URL + username + password + prahy jsou VE SKRIPTU
+       │
+       │  GET /api/monitoring   (celý JSON v RAM, vybere se metrika)
+       ▼
+Raspberry Pi  server-meter :8080
 ```
 
-Tento dokument předpokládá **Nagios Core 4.4.5**. Cesty k `nagios.cfg` se liší podle toho, jestli jste Core kompilovali ze zdroje, nebo použili balíček distro.
+Jeden plugin, mnoho Nagios services. **Žádný** extra `/etc/nagios/private/server-meter.conf`. Nagios object configuration (`define host` / `command` / `service`) je oddělená věc — tu Nagios potřebuje, aby věděl, co zobrazovat.
+
+`Server Meter Health` (prázdné `$ARG1$` nebo `health`) používá `overall` z notifikačního enginu (hysteresis/doba). Jednotlivé metriky porovnávají **aktuální vzorek** s prahy ve skriptu, aby každá služba měla vlastní stav a vlastní časovou řadu.
+
+IAQ prahy jsou BSEC index anomálie, **ne** zdravotní / toxikologická hranice.
+
+Legacy endpoint `GET /api/nagios/check` + `scripts/check_server_meter.py` zůstává.
+
+server-meter **neposílá e-mail Nagiosu**. Nagios má vlastní notifikace. Viz [NOTIFICATIONS.md](NOTIFICATIONS.md).
 
 ---
 
-## Co endpoint skutečně vrací
+## Preferovaný plugin `check_server_meter.sh`
+
+Na **Nagios serveru** (ne na Raspberry Pi):
+
+```bash
+sudo ./scripts/install_nagios_plugin.sh
+```
+
+Detekce cesty: `/usr/local/nagios/libexec` (Core ze zdroje), jinak `/usr/lib/nagios/plugins`. Přepis: `PLUGIN_DIR`, `NAGIOS_BIN`, `NAGIOS_CFG`, `NAGIOS_OBJECTS_DIR`.
+
+Práva **0700**, vlastník `nagios:nagios`. Heslo je ve skriptu.
+
+Instalátor:
+
+1. aktualizuje `check_server_meter.sh` a **ponechá** existující konfigurační blok,
+2. nainstaluje `server-meter.cfg` (command `$ARG1$`, host, služby) — vždy tentýž soubor, žádné `_2` / `_new`,
+3. pokud už existuje `host_name` stejného jména, `define host` nepřidá (`INCLUDE_HOST=auto`),
+4. do `nagios.cfg` přidá `cfg_file=` jen když tam ještě není,
+5. spustí `/usr/local/nagios/bin/nagios -v /usr/local/nagios/etc/nagios.cfg` (nebo detekovanou binárku),
+6. při chybě konfigurace **neprovádí** reload,
+7. při úspěchu reloaduje Nagios (`NAGIOS_RELOAD=0` reload přeskočí).
+
+Upravte blok nahoře ve nainstalovaném skriptu:
+
+```bash
+SERVER_METER_URL="http://RPI_IP:8080"
+SERVER_METER_USERNAME="admin"
+SERVER_METER_PASSWORD="YOUR_PASSWORD"
+CONNECT_TIMEOUT=5
+REQUEST_TIMEOUT=10
+CURL_INSECURE=false
+
+TEMP_WARNING=45
+TEMP_CRITICAL=50
+CPU_TEMP_WARNING=70
+CPU_TEMP_CRITICAL=80
+RAM_WARNING=85
+RAM_CRITICAL=95
+SENSOR_AGE_WARNING=15
+SENSOR_AGE_CRITICAL=30
+```
+
+HTTPS: certifikát se ověřuje. Self-signed jen když `CURL_INSECURE=true`.
+
+### Proč `$ARG1$`
+
+```nagios
+define command {
+    command_name    check_server_meter
+    command_line    /usr/local/nagios/libexec/check_server_meter.sh $ARG1$
+}
+
+define service {
+    use                     generic-service
+    host_name               server-meter
+    service_description     BME690 Temperature
+    check_command           check_server_meter!temperature
+}
+```
+
+`check_server_meter!temperature` předá pluginu argument `temperature`. Nová metrika = větev v `case` ve skriptu + jeden `define service`. Šablona: `scripts/nagios/server-meter.cfg`.
+
+Pokud už máte hosta pod jiným `host_name`, nastavte `NAGIOS_HOST_NAME` a služby se přizpůsobí. Starou jednu službu `Server Meter` nahrazuje `Server Meter Health` plus per-metric služby.
+
+Plugin jen volá HTTP. Neukládá JSON, cache ani historii na disk.
+
+### Ruční test každé metriky
+
+```bash
+/usr/local/nagios/libexec/check_server_meter.sh --help
+/usr/local/nagios/libexec/check_server_meter.sh
+/usr/local/nagios/libexec/check_server_meter.sh temperature
+/usr/local/nagios/libexec/check_server_meter.sh humidity
+/usr/local/nagios/libexec/check_server_meter.sh pressure
+/usr/local/nagios/libexec/check_server_meter.sh gas_resistance
+/usr/local/nagios/libexec/check_server_meter.sh iaq
+/usr/local/nagios/libexec/check_server_meter.sh iaq_accuracy
+/usr/local/nagios/libexec/check_server_meter.sh static_iaq
+/usr/local/nagios/libexec/check_server_meter.sh static_iaq_accuracy
+/usr/local/nagios/libexec/check_server_meter.sh eco2
+/usr/local/nagios/libexec/check_server_meter.sh bvoc
+/usr/local/nagios/libexec/check_server_meter.sh cpu_temperature
+/usr/local/nagios/libexec/check_server_meter.sh cpu_load
+/usr/local/nagios/libexec/check_server_meter.sh ram
+/usr/local/nagios/libexec/check_server_meter.sh sensor
+echo $?
+```
+
+Příklady:
+
+```text
+OK - BME690 temperature=24.3 C | temperature=24.3;45;50
+OK - BME690 IAQ=52.6 | iaq=52.6;150;250
+OK - CPU temperature=48.1 C | cpu_temperature=48.1;70;80
+WARNING - BME690 temperature=46.2 C (warning >= 45 C) | temperature=46.2;45;50
+CRITICAL - BME690 temperature=51.4 C (critical >= 50 C) | temperature=51.4;45;50
+CRITICAL - BME690 sensor unavailable
+CRITICAL - BME690 data too old: 37 seconds | sensor_age=37;15;30
+UNKNOWN - invalid response from server-meter
+```
+
+Exit: `0` OK, `1` WARNING, `2` CRITICAL (včetně nedostupného HTTP), `3` UNKNOWN (neplatné JSON, chybějící metrika, heslo `CHANGE_ME`).
+
+### Performance data a grafy
+
+| Vrstva | Co poskytuje |
+|---|---|
+| Nagios service | stav, aktuální hodnotu, řádek performance data za `\|` |
+| PNP4Nagios / Nagiosgraph | historii, RRD, graf |
+
+Ověření, že Nagios perfdata přijímá:
+
+1. Výstup pluginu obsahuje `| label=value;warn;crit`.
+2. V `nagios.cfg` je `process_performance_data=1`.
+3. Je nastavený `service_perfdata_command` / `host_perfdata_command`, nebo `*_perfdata_file` + NPCD (PNP4Nagios), nebo ekvivalent Nagiosgraph.
+4. Po několika kontrolách existuje RRD/graf pro `server-meter` / `BME690 Temperature` atd.
+
+Pokud už PNP4Nagios nebo Nagiosgraph běží, **neinstalujte druhý** grafovací systém — stačí, že každá služba posílá vlastní perfdata.
+
+#### PNP4Nagios (když ještě není)
+
+Na Nagios hostiteli (ověřte balíčky vaší distro; cesty u Core ze zdroje):
+
+```text
+process_performance_data=1
+service_perfdata_file=/usr/local/pnp4nagios/var/service-perfdata
+service_perfdata_file_template=DATATYPE::SERVICEPERFDATA\tTIMET::$TIMET$\tHOSTNAME::$HOSTNAME$\tSERVICEDESC::$SERVICEDESC$\tSERVICEPERFDATA::$SERVICEPERFDATA$\tSERVICECHECKCOMMAND::$SERVICECHECKCOMMAND$\tHOSTSTATE::$HOSTSTATE$\tHOSTSTATETYPE::$HOSTSTATETYPE$\tSERVICESTATE::$SERVICESTATE$\tSERVICESTATETYPE::$SERVICESTATETYPE$
+service_perfdata_file_mode=a
+service_perfdata_file_processing_interval=15
+service_perfdata_file_processing_command=process-service-perfdata-file
+```
+
+Command `process-service-perfdata-file` volá `process_perfdata.pl` z PNP4Nagios. Host perfdata analogicky. Po `nagios -v` a reloadu se v PNP objeví samostatný graf na službu.
+
+#### Nagiosgraph (alternativa, ne souběžně s PNP)
+
+Mapování `$HOSTNAME$/$SERVICEDESC$` na RRD podle `map` souborů Nagiosgraph. Stejný princip: jedna service = jedna řada.
+
+Plugin **nevytváří** grafy uvnitř server-meter.
+
+---
+
+## Legacy endpoint `GET /api/nagios/check`
+
+Preferovaný plugin používá `GET /api/monitoring`. Následující platí jen pro starý textový endpoint.
 
 Kód: `server_meter/api/nagios.py`, trasa v `server_meter/api/routes.py`.
 
@@ -38,9 +197,9 @@ Vzdálený HTTP server **nemůže** nastavit unix exit code procesu na Nagios se
 | Tělo + hlavičky | stav kontroly (OK/WARNING/CRITICAL/UNKNOWN) |
 | Exit code pluginu | `0`/`1`/`2`/`3` procesu, který Nagios spustí **u sebe** |
 
-Plugin `scripts/check_server_meter.py` čte hlavičku `X-Nagios-State` (případně první slovo těla) a **sám** vrátí odpovídající exit code.
+Legacy plugin `scripts/check_server_meter.py` čte hlavičku `X-Nagios-State` (případně první slovo těla) a **sám** vrátí odpovídající exit code. Preferujte `check_server_meter.sh` + `/api/monitoring`, pokud na Nagios hostiteli nechcete Python 3.
 
-`check_http` standardně mapuje HTTP 200 → OK. WARNING i CRITICAL endpointu zůstanou HTTP 200, takže **`check_http` bez další logiky nerozliší** WARNING od OK. Proto je preferovaný Python plugin.
+`check_http` standardně mapuje HTTP 200 → OK. WARNING i CRITICAL endpointu zůstanou HTTP 200, takže **`check_http` bez další logiky nerozliší** WARNING od OK.
 
 ---
 

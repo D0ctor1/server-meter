@@ -19,7 +19,16 @@ def test_health_is_public(client):
 
 
 def test_protected_endpoints_require_auth(client):
-    for path in ("/api/status", "/api/current", "/api/history", "/api/system", "/api/sensor", "/api/nagios/check"):
+    for path in (
+        "/api/status",
+        "/api/current",
+        "/api/history",
+        "/api/system",
+        "/api/sensor",
+        "/api/nagios/check",
+        "/api/monitoring",
+        "/api/settings",
+    ):
         response = client.get(path)
         assert response.status_code == 401, path
 
@@ -170,6 +179,7 @@ def test_api_json_is_language_neutral():
                 "system": client.get("/api/system", auth=auth).json(),
                 "sensor": client.get("/api/sensor", auth=auth).json(),
                 "history": client.get("/api/history", auth=auth).json(),
+                "monitoring": client.get("/api/monitoring", auth=auth).json(),
             }
     for locale, payload in collected.items():
         assert payload["status"]["application"]["locale"] == locale

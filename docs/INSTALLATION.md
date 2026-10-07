@@ -367,7 +367,7 @@ Hlavní vstup je kořenový **`./install.sh`** (wrapper `scripts/install.sh` ho 
 - stáhne oficiální Bosch BSEC 3.2+ ZIP, z `PiFour_Armv8/libalgobsec.a` sestaví `/opt/server-meter/lib/libalgobsec.so` (rsync knihovnu nemaže)
 - pokud chybí `/etc/server-meter/config.yaml`, zkopíruje example (heslo `CHANGE_ME`)
 - `chmod 0750` a `chown root:server-meter` na `/etc/server-meter` (uživatel služby musí adresář projít)
-- `chmod 640` a `chown root:server-meter` na YAML
+- `chmod 660` a `chown root:server-meter` na YAML (služba musí umět uložit SMTP z webu)
 - ověří `test -r` jako uživatel `server-meter`
 - nainstaluje unit do `/etc/systemd/system/server-meter.service`
 - `systemctl daemon-reload`, `systemctl enable` a `systemctl start`
