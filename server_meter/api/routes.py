@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from server_meter.api.nagios import evaluate_nagios
+from server_meter.api.nagios import NagiosState, evaluate_nagios
 from server_meter.models.measurement import iaq_accuracy_label
 from server_meter.service import MeterService
+
+logger = logging.getLogger("server-meter")
 
 
 def build_router(auth_dep) -> APIRouter:
@@ -114,7 +117,14 @@ def build_router(auth_dep) -> APIRouter:
     async def nagios_check(request: Request, _user: str = Depends(auth_dep)) -> PlainTextResponse:
         service: MeterService = request.app.state.service
         config = request.app.state.config
-        state, body = evaluate_nagios(service, config)
+        try:
+            state, body = evaluate_nagios(service, config)
+        except Exception:
+            logger.exception("nagios evaluation failed")
+            state = NagiosState.UNKNOWN
+            body = "UNKNOWN - nagios evaluation failed"
+        # Header names are lowercased on the wire by ASGI/Uvicorn
+        # (x-nagios-status). HTTP clients treat them as case-insensitive.
         return PlainTextResponse(
             content=body + "\n",
             status_code=200,

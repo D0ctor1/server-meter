@@ -24,8 +24,8 @@ Kód: `server_meter/api/nagios.py`, trasa v `server_meter/api/routes.py`.
 |---|---|
 | HTTP status | **vždy 200**, když proces odpoví |
 | Tělo | jeden řádek začínající `OK`, `WARNING`, `CRITICAL` nebo `UNKNOWN` |
-| `X-Nagios-Status` | `0` / `1` / `2` / `3` |
-| `X-Nagios-State` | stejné slovo jako začátek těla |
+| `X-Nagios-Status` | `0` / `1` / `2` / `3` (HTTP je case-insensitive; Uvicorn na drátě pošle `x-nagios-status`) |
+| `X-Nagios-State` | stejné slovo jako začátek těla (`x-nagios-state`) |
 | Auth | stejné HTTP Basic Auth jako zbytek API |
 
 ### Proč HTTP 200 není Nagios exit code
@@ -122,11 +122,11 @@ UNKNOWN - Nagios checks disabled
 HTTP kód musí být **200**. Hlavičky:
 
 ```text
-X-Nagios-Status: 0
-X-Nagios-State: OK
+x-nagios-status: 0
+x-nagios-state: OK
 ```
 
-(nebo 1/2/3 podle stavu).
+(nebo 1/2/3 podle stavu). Uvicorn/ASGI posílá názvy hlaviček malými písmeny. `curl`, `http.client` i Nagios plugin je najdou i jako `X-Nagios-Status` — HTTP je case-insensitive. Porovnání v `bash` (`[[ … == *X-Nagios-Status:* ]]`) case-sensitive **není** a instalátor proto používá `grep -i`.
 
 ### Pokud curl selže
 

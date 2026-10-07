@@ -1,6 +1,15 @@
 from __future__ import annotations
 
+import subprocess
+
 from server_meter.models.measurement import Measurement, SensorStatus
+
+# Keep in sync with install.sh test_api() grep of `curl -D -` output.
+_INSTALLER_NAGIOS_GREP = ("grep", "-qiE", r"X-Nagios-Status:[[:space:]]*[0-3]")
+
+
+def _installer_sees_nagios_header(text: str) -> bool:
+    return subprocess.run(_INSTALLER_NAGIOS_GREP, input=text, text=True, check=False).returncode == 0
 
 
 def test_health_is_public(client):
@@ -76,7 +85,38 @@ def test_nagios_headers(client, auth, service):
     response = client.get("/api/nagios/check", auth=auth)
     assert response.status_code == 200
     assert response.headers["X-Nagios-Status"] == "2"
+    assert response.headers["x-nagios-status"] == "2"
+    assert response.headers["X-Nagios-State"] == "CRITICAL"
     assert response.text.startswith("CRITICAL")
+    dumped = "\n".join(f"{key}: {value}" for key, value in response.headers.items())
+    assert _installer_sees_nagios_header(dumped)
+
+
+def test_installer_grep_accepts_uvicorn_lowercase_nagios_headers():
+    wire = (
+        "HTTP/1.1 200 OK\r\n"
+        "content-type: text/plain; charset=utf-8\r\n"
+        "x-nagios-status: 3\r\n"
+        "x-nagios-state: UNKNOWN\r\n"
+        "\r\n"
+        "UNKNOWN - sensor state unknown; sensor_age=n/a\n"
+    )
+    assert _installer_sees_nagios_header(wire)
+    assert "X-Nagios-Status:" not in wire  # case-sensitive bash glob would miss this
+    title = wire.replace("x-nagios-status", "X-Nagios-Status")
+    assert _installer_sees_nagios_header(title)
+    assert not _installer_sees_nagios_header("HTTP/1.1 200 OK\n\nUNKNOWN - no header\n")
+
+
+def test_nagios_evaluation_error_is_unknown(client, auth, monkeypatch):
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("snapshot failed")
+
+    monkeypatch.setattr("server_meter.api.routes.evaluate_nagios", _boom)
+    response = client.get("/api/nagios/check", auth=auth)
+    assert response.status_code == 200
+    assert response.headers["x-nagios-status"] == "3"
+    assert response.text.startswith("UNKNOWN")
 
 
 def test_docs_disabled_in_factory():

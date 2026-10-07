@@ -486,8 +486,8 @@ curl -u admin:YOUR_PASSWORD \
 - HTTP status je **vždy 200**, pokud proces odpoví
 - `Content-Type: text/plain; charset=utf-8`
 - `Cache-Control: no-store`
-- `X-Nagios-Status`: `0` | `1` | `2` | `3`
-- `X-Nagios-State`: `OK` | `WARNING` | `CRITICAL` | `UNKNOWN`
+- `X-Nagios-Status` / `x-nagios-status`: `0` | `1` | `2` | `3`
+- `X-Nagios-State` / `x-nagios-state`: `OK` | `WARNING` | `CRITICAL` | `UNKNOWN`
 - tělo začíná stejným slovem a končí `\n`
 
 Příklad:

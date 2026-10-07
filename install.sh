@@ -489,18 +489,24 @@ test_api() {
     rm -f "${netrc}"
     fail "HTTP /api/health failed" "$(service_diagnostics)"
   fi
-  current="$(curl -fsS --netrc-file "${netrc}" http://127.0.0.1:8080/api/current || true)"
-  nagios="$(curl -fsS --netrc-file "${netrc}" -D - http://127.0.0.1:8080/api/nagios/check || true)"
-  hist="$(curl -fsS --netrc-file "${netrc}" http://127.0.0.1:8080/api/history || true)"
+  current="$(curl -sS --netrc-file "${netrc}" http://127.0.0.1:8080/api/current || true)"
+  # ASGI/Uvicorn sends header names lowercase (x-nagios-status). HTTP is
+  # case-insensitive; this grep must be too. Do not use curl -f: Nagios is
+  # always HTTP 200, and a 5xx body is more useful than an empty capture.
+  nagios="$(curl -sS --netrc-file "${netrc}" -D - http://127.0.0.1:8080/api/nagios/check || true)"
+  hist="$(curl -sS --netrc-file "${netrc}" http://127.0.0.1:8080/api/history || true)"
   rm -f "${netrc}"
   if [[ "${current}" != *'"timestamp"'* ]]; then
-    fail "HTTP /api/current failed" "Basic Auth or API error."
+    fail "HTTP /api/current failed" "Basic Auth or API error.
+${current}"
   fi
-  if [[ "${nagios}" != *"X-Nagios-Status:"* ]]; then
-    fail "HTTP /api/nagios/check failed" "Nagios endpoint did not return X-Nagios-Status."
+  if ! printf '%s' "${nagios}" | grep -qiE 'X-Nagios-Status:[[:space:]]*[0-3]'; then
+    fail "HTTP /api/nagios/check failed" "Expected X-Nagios-Status header (0-3).
+${nagios}"
   fi
   if [[ "${hist}" != *'"source":"ram"'* ]] || [[ "${hist}" != *'"persistent":false'* ]]; then
-    fail "RAM history check failed" "API must serve RAM-only history."
+    fail "RAM history check failed" "API must serve RAM-only history.
+${hist}"
   fi
   ok
 }
