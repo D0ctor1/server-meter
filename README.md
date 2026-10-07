@@ -1,317 +1,175 @@
 # server-meter
 
-RAM-only environmental monitor for **Raspberry Pi 5** + **Bosch BME690** on
-**Ubuntu Server 26.04.1 LTS** (ARM64).
+`server-meter` je webová monitorovací aplikace určená pro Raspberry Pi 5 a senzor Bosch BME690.
 
-The process reads the sensor, keeps history in a memory ring buffer, serves a
-light HTML UI and REST API, and exposes a Nagios Core 4.4.5 check. After a
-reboot the graphs are empty. **Sensor data are never written to the SD card.**
+Aplikace poskytuje:
+
+- webový dashboard,
+- aktuální hodnoty BME690,
+- historické grafy,
+- systémové informace Raspberry Pi,
+- REST API,
+- integraci s Nagios Core,
+- RAM-only historii měření.
+
+> Historie měření **není zapisována na SD kartu**.
+>
+> Po restartu Raspberry Pi je historie prázdná. Prázdné grafy ihned po rebootu **nejsou chyba**.
+
+Verze projektu: **1.0.0** (`server_meter/__init__.py`, `pyproject.toml`).
 
 ---
 
-## 1. Purpose
-
-Long-running 24/7 monitoring of indoor air and Pi health with:
-
-- almost no SD-card writes (Kingston 16 GB industrial card)
-- low CPU / RAM on a 4 GB Pi 5
-- a surviving web UI when the BME690 is unplugged
-- HTTP Basic Auth from YAML (password is not in source)
-
-## 2. Hardware
-
-| Item | Supported |
-| --- | --- |
-| Board | Raspberry Pi 5, 4 GB RAM, ARM64 |
-| Storage | microSD (application + config only) |
-| Sensor | Bosch Sensortec BME690 over I²C |
-| Address | `0x76` or `0x77` (YAML) |
-| I²C bus | default `1` (`/dev/i2c-1`) |
-
-## 3. Software
-
-- Python 3.11+ (3.12 on current Ubuntu images)
-- FastAPI, Uvicorn, Pydantic, PyYAML, smbus2
-- Optional proprietary **Bosch BSEC 3.2.0.0+** for IAQ / eCO2 / bVOC
-- systemd + journald (prefer volatile journal)
-- Nagios Core 4.4.5 via HTTP
-
-No SQLite, Influx, Prometheus TSDB, Redis, CSV, or measurement log files.
-
-## 4. Architecture
-
-```
-I²C  →  BME690 SensorAPI port  →  optional BSEC 3.x (RAM state)
-                                      ↓
-                               normalize (null if missing)
-                                      ↓
-                          RamBuffer (deque, hard cap)
-                                      ↓
-                    FastAPI  →  /api/*  +  static UI
-```
-
-Layers live in `server_meter/sensor`, `storage`, `monitoring`, `api`.
-
-## 5. Install Ubuntu packages
-
-```bash
-sudo apt update
-sudo apt install -y python3 python3-venv python3-dev python3-pip \
-    build-essential i2c-tools git
-```
-
-## 6. Enable I²C
-
-```bash
-sudo ./scripts/enable_i2c.sh
-sudo reboot   # if /dev/i2c-1 was missing
-sudo i2cdetect -y 1
-```
-
-Expect `76` or `77` on bus 1.
-
-## 7. Wire the BME690
-
-3.3 V, GND, SDA → GPIO2, SCL → GPIO3. See [docs/bme690-bsec.md](docs/bme690-bsec.md).
-
-## 8. Install BSEC (manual, proprietary)
-
-Bosch BSEC is **not** in this repo and is **not** open source.
-
-1. Accept the Bosch license.
-2. Download BSEC **3.2.0.0 or newer** from
-   [Bosch BME688/BME690 software](https://www.bosch-sensortec.com/software-tools/software/bme688-and-bme690-software/).
-3. Place the **aarch64 / PiFour_Armv8** `libalgobsec.so` on the Pi.
-4. Set `sensor.bsec.library_path` in YAML.
-
-Without BSEC the service still runs; IAQ/eCO2/bVOC stay `null`.
-Full steps: [docs/bme690-bsec.md](docs/bme690-bsec.md).
-
-## 9. Python environment
-
-From the project tree (or after `scripts/install.sh`):
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-Dev / tests:
-
-```bash
-pip install -r requirements-dev.txt
-pytest
-```
-
-## 10. YAML configuration
-
-Copy [config/config.example.yaml](config/config.example.yaml) to
-`/etc/server-meter/config.yaml` or `config/config.yaml`.
-
-The process **reads** YAML at startup and **never writes it back**.
-
-Production will **refuse to start** if:
-
-- `web.auth.password` is `CHANGE_ME` or shorter than 8 characters
-- auth is disabled
-- OpenAPI docs are enabled
-- I²C address is not `0x76`/`0x77`
-- BSEC LP is combined with `interval_seconds < 3`
-- warning/critical thresholds are inverted
-
-Desktop without hardware:
-
-```bash
-python -m server_meter --config config/config.mock.yaml
-```
-
-## 11. Run (foreground)
-
-```bash
-python -m server_meter --config /etc/server-meter/config.yaml
-```
-
-Override listen address: `--host 0.0.0.0 --port 8080`.
-
-## 12. systemd
-
-```bash
-sudo ./scripts/install.sh
-# edit /etc/server-meter/config.yaml  (password + I2C address)
-sudo systemctl start server-meter
-sudo systemctl status server-meter
-```
-
-Unit: [systemd/server-meter.service](systemd/server-meter.service)
-
-Hardened (`ProtectSystem=strict`, `DeviceAllow=/dev/i2c-*`, no writable
-app paths). The service user is in group `i2c`.
-
-Enable on boot is done by the install script (`systemctl enable`).
-
-## 13. Web UI
-
-`http://<pi-ip>:8080/`
-
-Browser Basic Auth. Cards for temperature, humidity, pressure, gas
-resistance, IAQ, IAQ accuracy, eCO2, bVOC. Charts poll incrementally
-(`/api/history?since=`) every 5 s and current values every 4 s. Chart.js
-animations are off.
-
-After reboot the charts start empty.
-
-## 14. REST API
-
-| Method | Path | Auth | Notes |
-| --- | --- | --- | --- |
-| GET | `/api/health` | optional | liveness, no history |
-| GET | `/api/status` | yes | counters, no secrets |
-| GET | `/api/current` | yes | latest sample (`null` if missing) |
-| GET | `/api/history` | yes | `?seconds=` `?limit=` `?since=` |
-| GET | `/api/system` | yes | Pi CPU/RAM/uptime |
-| GET | `/api/sensor` | yes | driver + health |
-| GET | `/api/nagios/check` | yes | plugin text + headers |
-| GET | `/` | yes | UI |
-| GET | `/docs` `/redoc` | n/a | only if `api_docs_enabled` |
-
-Missing sensor values are JSON `null`, never invented numbers.
-`/api/history` reads RAM only (`"persistent": false`).
-
-## 15. Nagios
-
-See [docs/nagios.md](docs/nagios.md). Example:
-
-```nagios
-define command {
-    command_name    check_server_meter
-    command_line    $USER1$/check_server_meter.py --url http://$HOSTADDRESS$:8080/api/nagios/check --user $ARG1$ --password $ARG2$
-}
-
-define service {
-    use                 generic-service
-    host_name           raspberrypi
-    service_description server-meter
-    check_command       check_server_meter!admin!YOUR_PASSWORD
-}
-```
-
-Exit codes: 0 OK, 1 WARNING, 2 CRITICAL, 3 UNKNOWN.
-
-## 16. Troubleshooting
-
-| Symptom | Check |
-| --- | --- |
-| Service exits immediately | `journalctl -u server-meter -e` — usually `CHANGE_ME` password |
-| UI 401 | username/password in YAML |
-| Sensor unavailable, UI up | expected if wiring/I²C is down; watch recoveries in `/api/status` |
-| `i2cdetect` empty | `enable_i2c.sh`, 3.3 V, address, `dtoverlay` |
-| Chip ID error | not a BME690, or bus noise |
-| IAQ always null | BSEC `.so` not installed or `bsec.enabled: false` |
-| IAQ accuracy 0 after reboot | RAM-only BSEC state; wait for convergence |
-| High journal writes | `logging.access_log: false`, journald `Storage=volatile` |
-| Permission denied `/dev/i2c-1` | user in group `i2c`, `DeviceAllow` in the unit |
-
-## 17. SD-card protection
-
-- No measurement database or CSV
-- No application `.log` files
-- No BSEC state file
-- Access log off
-- systemd `ProtectSystem=strict` and empty `ReadWritePaths`
-- Documented volatile journald — [docs/storage-policy.md](docs/storage-policy.md)
-
-## 18. RAM-only history
-
-```yaml
-history:
-  max_samples: 10000          # also capped internally at 20000
-  max_age_seconds: 86400
-memory_protection:
-  enabled: true
-  warning_percent: 70         # drop oldest 10%
-  critical_percent: 80        # drop oldest 25%
-  emergency_percent: 90       # drop oldest 50%
-```
-
-Oldest samples go first. Remaining history stays contiguous. Nothing is
-spilled to disk.
-
-## 19. Backup
-
-Backup **only** configuration and the application tree:
-
-```bash
-sudo cp /etc/server-meter/config.yaml /root/server-meter-config.yaml
-```
-
-There is no measurement backup. That is the product requirement.
-
-## 20. Upgrade
-
-```bash
-cd /path/to/new-tree
-sudo ./scripts/install.sh
-sudo systemctl restart server-meter
-```
-
-`/etc/server-meter/config.yaml` is kept. History in RAM resets.
-
-## 21. Uninstall
-
-```bash
-sudo ./scripts/uninstall.sh          # keeps /etc/server-meter
-sudo ./scripts/uninstall.sh --purge  # also deletes config and the service user
-```
+## Pro koho je tento dokument
+
+Máte čistě nainstalovaný Ubuntu Server, Raspberry Pi 5 (4 GB), Kingston Industrial 16 GB microSD, BME690 a STEMMA QT / Qwiic kabel. Začněte zde:
+
+1. [Zapojení hardware](docs/HARDWARE.md) — **nejprve vypněte Pi**
+2. [Instalace od nuly](docs/INSTALLATION.md)
+3. [YAML konfigurace](docs/CONFIGURATION.md)
+4. [Webové rozhraní](docs/WEB-INTERFACE.md)
+5. [Nagios Core 4.4.5](docs/NAGIOS.md)
 
 ---
 
-## Security notes
+## Kompatibilita
 
-- Production debug/docs are off.
-- Tracebacks are not sent to clients.
-- Passwords never appear in `/api/status` or logs.
-- HTTP Basic Auth is **not encrypted**. Use a reverse proxy with TLS off
-  the Pi if the network is not a trusted LAN.
-- Request size is capped (`web.max_request_bytes`).
+| Component | Version |
+|---|---|
+| Raspberry Pi | 5 / 4 GB |
+| Architecture | ARM64 (`aarch64`) |
+| Ubuntu Server | 26.04.1 LTS 64-bit |
+| Sensor | Bosch Sensortec BME690 |
+| Interface | I²C bus 1, adresa `0x76` nebo `0x77` |
+| Python | 3.11+ (na Ubuntu 26.04 je výchozí `python3` řady **3.14**; ověřte `python3 --version`) |
+| BSEC | proprietární Bosch **3.2.0.0 nebo novější** (není součástí tohoto repozitáře) |
+| server-meter | 1.0.0 |
+| Nagios Core | 4.4.5 |
 
-## Dependencies (why each exists)
+---
 
-| Package | Reason |
-| --- | --- |
-| fastapi | REST + static UI |
-| uvicorn | ASGI server |
-| pydantic | config/API validation |
-| PyYAML | YAML config |
-| smbus2 | Linux I²C |
-| httpx / pytest (dev) | tests only |
+## Architektura
 
-psutil is **not** used; `/proc` and `/sys` provide system metrics.
-
-## Project layout
-
+```text
+                  ┌──────────────────────┐
+                  │     Bosch BME690     │
+                  └──────────┬───────────┘
+                             │ I²C
+                             │
+                  ┌──────────▼───────────┐
+                  │   Raspberry Pi 5     │
+                  │                      │
+                  │     server-meter     │
+                  │                      │
+                  │  Sensor/BSEC layer   │
+                  │         │            │
+                  │         ▼            │
+                  │     RAM history      │
+                  │         │            │
+                  │   ┌─────┴─────┐      │
+                  │   │           │      │
+                  │   ▼           ▼      │
+                  │ Web UI      REST API │
+                  └───┬───────────┬──────┘
+                      │           │
+                      │           │ HTTP
+                      │           ▼
+                 Web browser   Nagios Core
 ```
-server-meter/
-├── README.md
-├── LICENSE
-├── pyproject.toml
-├── requirements.txt
-├── config/
-├── server_meter/
-│   ├── api/
-│   ├── sensor/
-│   ├── storage/
-│   ├── monitoring/
-│   └── models/
-├── web/
-├── systemd/
-├── scripts/
-├── tests/
-└── docs/
+
+Skutečné vrstvy v kódu:
+
+| Vrstva | Soubory |
+|---|---|
+| I²C | `server_meter/sensor/i2c_bus.py` (`smbus2`) |
+| BME690 SensorAPI v1.1.0 | `server_meter/sensor/bme690.py` |
+| volitelný BSEC 3.x | `server_meter/sensor/bsec.py` (ctypes, `libalgobsec.so`) |
+| mock bez hardware | `server_meter/sensor/mock.py` |
+| RAM historie | `server_meter/storage/ram_buffer.py` |
+| měřicí smyčka | `server_meter/service.py` |
+| HTTP | FastAPI v `server_meter/app.py` a `server_meter/api/` |
+| UI | `web/index.html`, `web/js/app.js` |
+
+## Tok dat a SD karta
+
+```text
+BME690
+   │
+   ▼
+Measurement
+   │
+   ▼
+RAM BUFFER ───────────────► Web/API
+   │
+   │ memory pressure
+   ▼
+delete oldest samples
+
+   X
+   │
+   ▼
+SD CARD
 ```
 
-## License
+> Šipka z RAM na SD kartu záměrně neexistuje.
 
-MIT for server-meter. BME690 compensation is a port of Bosch Sensortec
-BME690 SensorAPI v1.1.0 (BSD-3-Clause). BSEC remains Bosch proprietary
-software that you must obtain yourself.
+Aplikace za běhu **nezapisuje** naměřená data, historii ani BSEC stav na disk. Na SD kartě smí být jen kód, venv, YAML a systemd unit. Podrobnosti: [docs/STORAGE-POLICY.md](docs/STORAGE-POLICY.md).
+
+---
+
+## Dokumentace
+
+| Dokument | Obsah |
+|---|---|
+| [docs/INSTALLATION.md](docs/INSTALLATION.md) | Od čistého Ubuntu po dashboard (krok za krokem) |
+| [docs/HARDWARE.md](docs/HARDWARE.md) | Pinout, kabel, bezpečné zapojení |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Každá položka YAML |
+| [docs/BME690-BSEC.md](docs/BME690-BSEC.md) | I²C driver, proprietární BSEC, ARM64 |
+| [docs/WEB-INTERFACE.md](docs/WEB-INTERFACE.md) | Login, karty, grafy |
+| [docs/API.md](docs/API.md) | REST endpointy a curl |
+| [docs/NAGIOS.md](docs/NAGIOS.md) | Nagios Core 4.4.5 |
+| [docs/SYSTEMD.md](docs/SYSTEMD.md) | Služba, logy, volatile journald |
+| [docs/STORAGE-POLICY.md](docs/STORAGE-POLICY.md) | RAM-only, audit zápisů na SD |
+| [docs/SECURITY.md](docs/SECURITY.md) | Basic Auth, práva, TLS, firewall |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Diagnostika |
+| [docs/UPDATE.md](docs/UPDATE.md) | Upgrade |
+| [docs/UNINSTALL.md](docs/UNINSTALL.md) | Odinstalace |
+
+---
+
+## Rychlý přehled po instalaci
+
+| Položka | Hodnota v této implementaci |
+|---|---|
+| Aplikační adresář | `/opt/server-meter` |
+| Python venv | `/opt/server-meter/venv` (**ne** `.venv`) |
+| Konfigurace | `/etc/server-meter/config.yaml` |
+| Systemd unit | `/etc/systemd/system/server-meter.service` |
+| Služba | `server-meter.service` |
+| Uživatel | `server-meter` (skupina `i2c`) |
+| Poslech | `0.0.0.0:8080` |
+| Spuštění | `python -m server_meter --config /etc/server-meter/config.yaml` |
+| UI | `http://RPI_IP:8080/` |
+| Health | `GET /api/health` (ve výchozím stavu **bez** hesla) |
+
+`RPI_IP` nahraďte adresou z `hostname -I` (příklad: `192.168.1.50`).
+
+---
+
+## Známá omezení implementace
+
+Tyto body **nejsou** zamlčené. Dokumentace je popisuje tam, kde na ně narazíte:
+
+1. Bosch BSEC se **nestahuje automaticky** (proprietární licence). Bez `libalgobsec.so` běží fyzické hodnoty T/p/RH/gas; IAQ, eCO2 a bVOC zůstanou `null`.
+2. BSEC wrapper volá `bsec_do_steps`, **nevolá** `bsec_sensor_control`. Heater řídí vlastní forced mode (výchozí 320 °C / 150 ms). Kvalita IAQ se může lišit od oficiálního Bosch integration example.
+3. `scripts/install.sh` službu **povolí**, ale **nespustí**. Příklad YAML obsahuje heslo `CHANGE_ME`; v `environment: production` proces **odmítne start**, dokud heslo nezměníte.
+4. Statické `/css`, `/js`, `/vendor` **nevyžadují** Basic Auth. HTML `/` a API (kromě health) ano.
+5. Výchozí I²C adresa v `config/config.example.yaml` je **0x77**. Po `i2cdetect` ji musíte sladit s realitou (`0x76` nebo `0x77`).
+6. `NagiosState.UNKNOWN = 3` je numericky větší než `CRITICAL = 2`. Při současném UNKNOWN (inicializace bez vzorku) a třeba vysoké teplotě CPU zůstane UNKNOWN. Po prvním vzorku se to v běžném provozu neprojeví.
+7. `pyproject.toml` classifery uvádějí Python 3.11–3.13; Ubuntu 26.04 dodává **3.14**. `requires-python` je `>=3.11`. Na 3.14 spouštějte testy po instalaci (`python -m pytest`).
+
+---
+
+## Licence
+
+MIT pro server-meter. Kompenzační vzorce BME690 vycházejí z Bosch Sensortec BME690 SensorAPI v1.1.0 (BSD-3-Clause). BSEC zůstává proprietárním softwarem Bosch — musíte ho získat sami. Viz [docs/BME690-BSEC.md](docs/BME690-BSEC.md).
