@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from server_meter.app import create_app
 from server_meter.service import MeterService
-from tests.conftest import test_config
+from tests.conftest import make_config
 
 
 def test_wrong_password(client):
@@ -18,7 +18,7 @@ def test_wrong_user(client):
 
 
 def test_auth_can_be_disabled_outside_production():
-    cfg = test_config()
+    cfg = make_config()
     cfg.web.auth.enabled = False
     with TestClient(create_app(cfg, MeterService(cfg))) as client:
         assert client.get("/api/status").status_code == 200

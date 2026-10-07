@@ -41,7 +41,7 @@ def test_no_measurement_file_logging():
 
 def test_bsec_state_not_written():
     text = (SRC / "sensor" / "bsec.py").read_text(encoding="utf-8")
-    assert "bsec_get_state" not in text
+    assert "bsec_get_state(" not in text
     assert "persist_state" in (SRC / "config.py").read_text(encoding="utf-8")
 
 

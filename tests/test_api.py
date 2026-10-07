@@ -79,12 +79,12 @@ def test_nagios_headers(client, auth, service):
 
 
 def test_docs_disabled_in_factory():
-    from tests.conftest import test_config
+    from tests.conftest import make_config
     from server_meter.app import create_app
     from server_meter.service import MeterService
     from fastapi.testclient import TestClient
 
-    cfg = test_config()
+    cfg = make_config()
     cfg.web.api_docs_enabled = False
     with TestClient(create_app(cfg, MeterService(cfg))) as client:
         assert client.get("/docs").status_code == 404

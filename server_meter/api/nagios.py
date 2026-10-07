@@ -86,7 +86,7 @@ def evaluate_nagios(service: MeterService, config: AppConfig) -> tuple[NagiosSta
 
 def _fmt(value: float | None, suffix: str, digits: int = 1) -> str:
     if value is None:
-        return f"n/a{suffix}"
+        return "n/a"
     return f"{value:.{digits}f}{suffix}"
 
 

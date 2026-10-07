@@ -3,7 +3,7 @@ from __future__ import annotations
 from server_meter.api.nagios import NagiosState, evaluate_nagios
 from server_meter.models.measurement import Measurement, SensorStatus
 from server_meter.monitoring.system import SystemMetrics
-from tests.conftest import test_config
+from tests.conftest import make_config
 from server_meter.service import MeterService
 
 
@@ -39,7 +39,7 @@ class StubSystem:
 
 
 def _service(**system) -> MeterService:
-    svc = MeterService(test_config())
+    svc = MeterService(make_config())
     svc.system = StubSystem(**system)  # type: ignore[assignment]
     return svc
 

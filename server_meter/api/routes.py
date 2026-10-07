@@ -14,7 +14,6 @@ from server_meter.service import MeterService
 
 def build_router(auth_dep) -> APIRouter:
     router = APIRouter()
-    Auth = Annotated[str, Depends(auth_dep)]
 
     @router.get("/api/health")
     async def health(request: Request) -> dict[str, str]:
@@ -23,7 +22,7 @@ def build_router(auth_dep) -> APIRouter:
         return {"status": "ok", "service": "server-meter"}
 
     @router.get("/api/status")
-    async def status(request: Request, _: Auth) -> dict[str, Any]:
+    async def status(request: Request, _user: str = Depends(auth_dep)) -> dict[str, Any]:
         service: MeterService = request.app.state.service
         config = request.app.state.config
         sysm = service.system_snapshot()
@@ -60,7 +59,7 @@ def build_router(auth_dep) -> APIRouter:
         }
 
     @router.get("/api/current")
-    async def current(request: Request, _: Auth) -> dict[str, Any]:
+    async def current(request: Request, _user: str = Depends(auth_dep)) -> dict[str, Any]:
         service: MeterService = request.app.state.service
         sample = service.current
         if sample is None:
@@ -77,7 +76,7 @@ def build_router(auth_dep) -> APIRouter:
     @router.get("/api/history")
     async def history(
         request: Request,
-        _: Auth,
+        _user: str = Depends(auth_dep),
         seconds: Annotated[float | None, Query(gt=0, le=604800)] = None,
         limit: Annotated[int | None, Query(ge=1, le=20_000)] = None,
         since: Annotated[float | None, Query()] = None,
@@ -92,12 +91,12 @@ def build_router(auth_dep) -> APIRouter:
         }
 
     @router.get("/api/system")
-    async def system(request: Request, _: Auth) -> dict[str, Any]:
+    async def system(request: Request, _user: str = Depends(auth_dep)) -> dict[str, Any]:
         service: MeterService = request.app.state.service
         return service.system_snapshot().to_api_dict()
 
     @router.get("/api/sensor")
-    async def sensor(request: Request, _: Auth) -> dict[str, Any]:
+    async def sensor(request: Request, _user: str = Depends(auth_dep)) -> dict[str, Any]:
         service: MeterService = request.app.state.service
         return {
             "status": service.sensor_status.value,
@@ -112,7 +111,7 @@ def build_router(auth_dep) -> APIRouter:
         }
 
     @router.get("/api/nagios/check")
-    async def nagios_check(request: Request, _: Auth) -> PlainTextResponse:
+    async def nagios_check(request: Request, _user: str = Depends(auth_dep)) -> PlainTextResponse:
         service: MeterService = request.app.state.service
         config = request.app.state.config
         state, body = evaluate_nagios(service, config)

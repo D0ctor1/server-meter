@@ -10,7 +10,7 @@ from server_meter.config import AppConfig
 from server_meter.service import MeterService
 
 
-def test_config(**overrides) -> AppConfig:
+def make_config(**overrides) -> AppConfig:
     data = {
         "application": {"name": "server-meter", "environment": "test"},
         "web": {
@@ -50,7 +50,7 @@ def test_config(**overrides) -> AppConfig:
 
 @pytest.fixture
 def config() -> AppConfig:
-    return test_config()
+    return make_config()
 
 
 @pytest.fixture

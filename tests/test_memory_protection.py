@@ -49,7 +49,7 @@ def test_classify_levels():
 
 
 def test_emergency_trims_oldest_first():
-    cfg = MemoryProtectionConfig(check_interval_seconds=0)
+    cfg = MemoryProtectionConfig(check_interval_seconds=5)
     buf = _buffer(100)
     prot = MemoryProtector(cfg, buf, FakeSystem(95))
     snap = prot.maybe_protect(now=100.0)
@@ -61,7 +61,7 @@ def test_emergency_trims_oldest_first():
 
 
 def test_disabled_does_not_trim():
-    cfg = MemoryProtectionConfig(enabled=False, check_interval_seconds=0)
+    cfg = MemoryProtectionConfig(enabled=False, check_interval_seconds=5)
     buf = _buffer(40)
     prot = MemoryProtector(cfg, buf, FakeSystem(99))
     snap = prot.maybe_protect(now=1.0)

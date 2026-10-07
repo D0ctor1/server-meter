@@ -14,16 +14,16 @@ from server_meter.sensor.bme690 import (
 from server_meter.sensor.exceptions import SensorUnavailableError
 from server_meter.sensor.factory import create_sensor_driver
 from server_meter.sensor.mock import MockBme690Driver
-from tests.conftest import test_config
+from tests.conftest import make_config
 
 
 def test_factory_mock():
-    driver = create_sensor_driver(test_config().sensor)
+    driver = create_sensor_driver(make_config().sensor)
     assert isinstance(driver, MockBme690Driver)
 
 
 def test_mock_generates_realistic_ranges():
-    driver = MockBme690Driver(test_config().sensor)
+    driver = MockBme690Driver(make_config().sensor)
     driver.open()
     sample = driver.read()
     assert sample.sensor_status is SensorStatus.OK
@@ -38,7 +38,7 @@ def test_mock_generates_realistic_ranges():
 
 
 def test_mock_can_fail_then_recover():
-    driver = MockBme690Driver(test_config().sensor, fail_reads=1)
+    driver = MockBme690Driver(make_config().sensor, fail_reads=1)
     driver.open()
     with pytest.raises(SensorUnavailableError):
         driver.read()
