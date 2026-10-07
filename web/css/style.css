@@ -85,7 +85,24 @@ select {
   padding: 6px 8px;
 }
 .hint { margin: 0 0 14px; }
-.chart-card canvas { width: 100%; height: 220px; }
+.chart-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.chart-frame {
+  position: relative;
+  width: 100%;
+  height: 220px;
+  max-height: 220px;
+  flex: 0 0 220px;
+  margin-top: 10px;
+}
+.chart-frame canvas {
+  display: block;
+  /* Chart.js owns canvas pixel size; do not set height here or the
+     card grows on every update (responsive parent/canvas feedback). */
+}
 
 .state-ok { color: var(--ok); }
 .state-warn { color: var(--warn); }

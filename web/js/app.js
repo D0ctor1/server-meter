@@ -107,6 +107,7 @@
         animation: false,
         responsive: true,
         maintainAspectRatio: false,
+        resizeDelay: 50,
         parsing: false,
         normalized: true,
         plugins: { legend: { display: false } },
@@ -132,7 +133,7 @@
     for (const spec of CHARTS) {
       const card = document.createElement("article");
       card.className = "chart-card";
-      card.innerHTML = `<h3>${spec.label} <span class="unit">${spec.unit}</span></h3><canvas id="chart-${spec.key}"></canvas>`;
+      card.innerHTML = `<h3>${spec.label} <span class="unit">${spec.unit}</span></h3><div class="chart-frame"><canvas id="chart-${spec.key}"></canvas></div>`;
       root.appendChild(card);
       const canvas = card.querySelector("canvas");
       state.charts[spec.key] = makeChart(canvas, spec.label);

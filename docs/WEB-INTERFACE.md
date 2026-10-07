@@ -99,7 +99,7 @@ Okno: 15 min / 1 h (výchozí) / 6 h / 24 h. Maximálně 720 bodů na graf.
 
 Frontend **nestahuje** celou historii každé 4 sekundy.
 
-Animace Chart.js jsou vypnuté (`animation: false`).
+Animace Chart.js jsou vypnuté (`animation: false`). Každý graf sedí v rámečku **220 px** (`.chart-frame`). Výška se nesmí dávat na `<canvas>` — Chart.js `responsive` by jinak kartu při každém `update()` natahoval dolů.
 
 ---
 
