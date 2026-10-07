@@ -58,7 +58,7 @@ Soubory: `web/index.html`, `web/js/app.js`, `web/js/i18n.js`. Texty UI jsou **č
 
 | Karta | Zdroj API | Obsah |
 |---|---|---|
-| Server | `/api/status` | stav `online` / `unreachable` (UI přeloží); app uptime v sekundách |
+| Server | `/api/status` | stav `online` / `unreachable` (UI přeloží); doba běhu aplikace a hostitele ve s/min/h/d |
 | Sensor | `/api/status` | API: `ok`, `unavailable`, `initializing`, `error`, `unknown`; UI zobrazí lokalizovaný popisek; stáří vzorku |
 | CPU | `/api/system` | teplota °C, CPU %, load1, kmitočet MHz |
 | RAM | `/api/system` | využití %, used / total GiB |
@@ -81,6 +81,8 @@ Barvy: zelená OK, žlutá varování (CPU ≥ 70 °C, RAM ≥ 70 %), červená 
 | bVOC | `bvoc` | ppm |
 
 Chybějící hodnota (typicky bez BSEC) = **—**.
+
+U odporu plynu, IAQ, statického IAQ, přesnosti statického IAQ, eCO₂ a bVOC je ikona **(i)**. Po najetí myší (nebo klepnutí) se zobrazí vysvětlivka podle dokumentace Bosch BME690 / BSEC, lokalizovaná CZ/EN. Stejné ikony jsou u odpovídajících grafů.
 
 IAQ accuracy v API zůstává `stabilizing` / `low` / `medium` / `high`. UI to přeloží (CZ: stabilizace, nízká, střední, vysoká).
 

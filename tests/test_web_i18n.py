@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -93,9 +94,86 @@ def test_used_translation_keys_exist():
     keys = _keys(_section("CZ"))
     used = set(re.findall(r'data-i18n(?:-html|-placeholder|-aria)?="([a-z0-9_.]+)"', INDEX))
     used |= set(re.findall(r'\bt\(\s*"([a-z0-9_.]+)"', APP_JS))
-    used |= set(re.findall(r'labelKey:\s*"([a-z0-9_.]+)"', APP_JS))
+    used |= set(re.findall(r'(?:labelKey|helpKey):\s*"([a-z0-9_.]+)"', APP_JS))
     missing = sorted(key for key in used if key not in keys)
     assert missing == []
+
+
+def test_help_keys_cover_gas_iaq_and_voc_metrics():
+    keys = _keys(_section("CZ"))
+    for key in (
+        "sensor.help.gas_resistance",
+        "sensor.help.iaq",
+        "sensor.help.static_iaq",
+        "sensor.help.static_iaq_accuracy",
+        "sensor.help.eco2",
+        "sensor.help.bvoc",
+        "help.icon_label",
+        "duration.days",
+        "duration.hours",
+        "duration.minutes",
+        "duration.seconds",
+    ):
+        assert key in keys
+    assert "info-tip" in APP_JS
+    assert "info-tip" in CSS
+    assert "formatDuration" in APP_JS
+    assert "formatDuration" in I18N_JS
+    for metric in ("gas_resistance", "iaq", "static_iaq", "static_iaq_accuracy", "eco2", "bvoc"):
+        assert f'helpKey: "sensor.help.{metric}"' in APP_JS
+
+
+def test_duration_format_groups_seconds_hours_and_days():
+    import json
+    import shutil
+    import subprocess
+
+    if not shutil.which("node"):
+        assert "86400" in I18N_JS
+        assert "3600" in I18N_JS
+        return
+    script = r"""
+const fs = require("fs");
+const vm = require("vm");
+const code = fs.readFileSync(process.env.I18N_JS, "utf8");
+const context = {
+  window: {},
+  document: {
+    documentElement: { dataset: { locale: "CZ" }, lang: "" },
+    querySelectorAll: () => [],
+    readyState: "complete",
+    addEventListener() {},
+    title: "",
+  },
+};
+vm.createContext(context);
+vm.runInContext(code, context);
+const i18n = context.ServerMeterI18n;
+i18n.setLocale("CZ");
+const cz = {
+  s: i18n.formatDuration(45),
+  min: i18n.formatDuration(93),
+  host: i18n.formatDuration(1606),
+  h: i18n.formatDuration(3661),
+  d: i18n.formatDuration(90061),
+};
+i18n.setLocale("EN");
+const en = { min: i18n.formatDuration(93), d: i18n.formatDuration(90061) };
+process.stdout.write(JSON.stringify({ cz, en }));
+"""
+    result = subprocess.check_output(
+        ["node", "-e", script],
+        text=True,
+        env={**os.environ, "I18N_JS": str(ROOT / "web" / "js" / "i18n.js")},
+    )
+    payload = json.loads(result)
+    assert payload["cz"]["s"] == "45 s"
+    assert payload["cz"]["min"] == "1 min 33 s"
+    assert payload["cz"]["host"] == "26 min 46 s"
+    assert payload["cz"]["h"] == "1 h 1 min"
+    assert payload["cz"]["d"] == "1 d 1 h"
+    assert payload["en"]["min"] == "1 min 33 s"
+    assert payload["en"]["d"] == "1 d 1 h"
 
 
 def test_chart_frame_still_used_for_history_plots():

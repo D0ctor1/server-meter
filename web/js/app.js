@@ -10,23 +10,23 @@
     { key: "temperature", labelKey: "sensor.temperature", unit: "°C", digits: 1 },
     { key: "humidity", labelKey: "sensor.humidity", unit: "%", digits: 1 },
     { key: "pressure", labelKey: "sensor.pressure", unit: "hPa", digits: 1 },
-    { key: "gas_resistance", labelKey: "sensor.gas_resistance", unit: "kΩ", digits: 1, scale: 0.001 },
-    { key: "iaq", labelKey: "sensor.iaq", unit: "", digits: 0 },
+    { key: "gas_resistance", labelKey: "sensor.gas_resistance", helpKey: "sensor.help.gas_resistance", unit: "kΩ", digits: 1, scale: 0.001 },
+    { key: "iaq", labelKey: "sensor.iaq", helpKey: "sensor.help.iaq", unit: "", digits: 0 },
     { key: "iaq_accuracy", labelKey: "sensor.iaq_accuracy", unit: "", digits: 0 },
-    { key: "static_iaq", labelKey: "sensor.static_iaq", unit: "", digits: 0 },
-    { key: "static_iaq_accuracy", labelKey: "sensor.static_iaq_accuracy", unit: "", digits: 0 },
-    { key: "eco2", labelKey: "sensor.eco2", unit: "ppm", digits: 0 },
-    { key: "bvoc", labelKey: "sensor.bvoc", unit: "ppm", digits: 3 },
+    { key: "static_iaq", labelKey: "sensor.static_iaq", helpKey: "sensor.help.static_iaq", unit: "", digits: 0 },
+    { key: "static_iaq_accuracy", labelKey: "sensor.static_iaq_accuracy", helpKey: "sensor.help.static_iaq_accuracy", unit: "", digits: 0 },
+    { key: "eco2", labelKey: "sensor.eco2", helpKey: "sensor.help.eco2", unit: "ppm", digits: 0 },
+    { key: "bvoc", labelKey: "sensor.bvoc", helpKey: "sensor.help.bvoc", unit: "ppm", digits: 3 },
   ];
 
   const CHARTS = [
     { key: "temperature", labelKey: "sensor.temperature", unit: "°C" },
     { key: "humidity", labelKey: "sensor.humidity", unit: "%" },
     { key: "pressure", labelKey: "sensor.pressure", unit: "hPa" },
-    { key: "gas_resistance", labelKey: "sensor.gas_resistance", unit: "Ω" },
-    { key: "iaq", labelKey: "sensor.iaq", unit: "IAQ" },
-    { key: "eco2", labelKey: "sensor.eco2", unit: "ppm" },
-    { key: "bvoc", labelKey: "sensor.bvoc", unit: "ppm" },
+    { key: "gas_resistance", labelKey: "sensor.gas_resistance", helpKey: "sensor.help.gas_resistance", unit: "Ω" },
+    { key: "iaq", labelKey: "sensor.iaq", helpKey: "sensor.help.iaq", unit: "IAQ" },
+    { key: "eco2", labelKey: "sensor.eco2", helpKey: "sensor.help.eco2", unit: "ppm" },
+    { key: "bvoc", labelKey: "sensor.bvoc", helpKey: "sensor.help.bvoc", unit: "ppm" },
   ];
 
   const state = {
@@ -104,6 +104,36 @@
     return response.json();
   }
 
+  function closeInfoTips(except) {
+    document.querySelectorAll(".info-tip.is-open").forEach((el) => {
+      if (el !== except) el.classList.remove("is-open");
+    });
+  }
+
+  function appendInfoIcon(parent, helpKey) {
+    if (!helpKey) return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "info-tip";
+    btn.setAttribute("aria-label", t("help.icon_label"));
+    const mark = document.createElement("span");
+    mark.className = "info-tip-mark";
+    mark.textContent = "i";
+    const bubble = document.createElement("span");
+    bubble.className = "info-tip-bubble";
+    bubble.setAttribute("role", "tooltip");
+    bubble.textContent = t(helpKey);
+    btn.append(mark, bubble);
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const open = btn.classList.contains("is-open");
+      closeInfoTips(btn);
+      btn.classList.toggle("is-open", !open);
+    });
+    parent.append(btn);
+  }
+
   function renderCards() {
     const root = $("value-cards");
     root.innerHTML = "";
@@ -111,8 +141,20 @@
       const el = document.createElement("article");
       el.className = "value-card";
       el.id = `card-${spec.key}`;
-      el.innerHTML = `<h3></h3><p class="value" id="val-${spec.key}">—</p><p class="unit">${spec.unit}</p><p class="sub" id="sub-${spec.key}"></p>`;
-      el.querySelector("h3").textContent = t(spec.labelKey);
+      const heading = document.createElement("h3");
+      heading.append(document.createTextNode(t(spec.labelKey)));
+      appendInfoIcon(heading, spec.helpKey);
+      const value = document.createElement("p");
+      value.className = "value";
+      value.id = `val-${spec.key}`;
+      value.textContent = "—";
+      const unit = document.createElement("p");
+      unit.className = "unit";
+      unit.textContent = spec.unit;
+      const sub = document.createElement("p");
+      sub.className = "sub";
+      sub.id = `sub-${spec.key}`;
+      el.append(heading, value, unit, sub);
       root.appendChild(el);
     }
   }
@@ -183,6 +225,7 @@
       unit.className = "unit";
       unit.textContent = spec.unit;
       title.append(unit);
+      appendInfoIcon(title, spec.helpKey);
       const frame = document.createElement("div");
       frame.className = "chart-frame";
       const canvas = document.createElement("canvas");
@@ -290,11 +333,9 @@
         logout.hidden = !status.application.auth_enabled;
       }
       setText("server-status", statusText("online"), "state-ok");
-      const hostUp = system.uptime_seconds;
-      const hostTxt = hostUp == null ? "—" : `${Math.round(hostUp)}s`;
       $("app-uptime").textContent = t("system.app_host_uptime", {
-        app: Math.round(status.uptime_seconds || 0),
-        host: hostTxt,
+        app: i18n.formatDuration(status.uptime_seconds),
+        host: i18n.formatDuration(system.uptime_seconds),
       });
       const sensorState = status.sensor.status;
       setText("sensor-status", statusText(sensorState), stateClass(sensorState));
@@ -416,6 +457,10 @@
     setInterval(tickClock, 1000);
     $("login-form").addEventListener("submit", onLoginSubmit);
     $("logout-button").addEventListener("click", onLogout);
+    document.addEventListener("click", () => closeInfoTips());
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeInfoTips();
+    });
     const ok = await tryExistingSession();
     if (ok) showDashboard();
     else showLogin("");
