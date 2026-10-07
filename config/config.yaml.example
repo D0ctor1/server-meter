@@ -1,0 +1,52 @@
+# Duplicate of config.example.yaml for operators who look for *.yaml.example
+# Copy, rename, and set a real password. The running process never writes YAML.
+
+application:
+  name: server-meter
+  environment: production
+
+web:
+  host: "0.0.0.0"
+  port: 8080
+  api_docs_enabled: false
+  health_public: true
+  auth:
+    enabled: true
+    username: "admin"
+    password: "CHANGE_ME"
+
+sensor:
+  type: "BME690"
+  driver: "bme690"
+  i2c:
+    bus: 1
+    address: 0x77
+  interval_seconds: 5
+  bsec:
+    enabled: true
+    library_path: ""
+    sample_rate: "lp"
+    persist_state: false
+
+history:
+  max_samples: 10000
+  max_age_seconds: 86400
+
+memory_protection:
+  enabled: true
+  warning_percent: 70
+  critical_percent: 80
+  emergency_percent: 90
+
+nagios:
+  enabled: true
+  sensor_max_age_seconds: 30
+  thresholds:
+    cpu_temperature_warning: 70
+    cpu_temperature_critical: 80
+    ram_usage_warning: 70
+    ram_usage_critical: 85
+
+logging:
+  level: INFO
+  access_log: false

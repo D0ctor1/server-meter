@@ -1,0 +1,13 @@
+# Runtime dependencies for server-meter.
+# Each package is required; do not add disk-backed databases or telemetry agents.
+#
+# fastapi   — REST API, static UI, request validation
+# uvicorn   — ASGI server (no --reload in production; access log disabled by default)
+# pydantic  — YAML/API models and startup validation
+# PyYAML    — configuration file parser
+# smbus2    — Linux I²C (BME690); unused by the mock driver
+fastapi>=0.115.0,<1.0.0
+uvicorn>=0.32.0,<1.0.0
+pydantic>=2.9.0,<3.0.0
+PyYAML>=6.0.2,<7.0.0
+smbus2>=0.4.3,<0.6.0

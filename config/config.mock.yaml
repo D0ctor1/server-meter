@@ -1,0 +1,48 @@
+# Development / desktop configuration. No BME690 required.
+application:
+  name: server-meter
+  environment: development
+
+web:
+  host: "127.0.0.1"
+  port: 8080
+  api_docs_enabled: true
+  health_public: true
+  auth:
+    enabled: true
+    username: "admin"
+    password: "devpass1"
+
+sensor:
+  type: "BME690"
+  driver: "mock"
+  i2c:
+    bus: 1
+    address: 0x77
+  interval_seconds: 5
+  bsec:
+    enabled: false
+    persist_state: false
+
+history:
+  max_samples: 2000
+  max_age_seconds: 86400
+
+memory_protection:
+  enabled: true
+  warning_percent: 70
+  critical_percent: 80
+  emergency_percent: 90
+
+nagios:
+  enabled: true
+  sensor_max_age_seconds: 30
+  thresholds:
+    cpu_temperature_warning: 70
+    cpu_temperature_critical: 80
+    ram_usage_warning: 70
+    ram_usage_critical: 85
+
+logging:
+  level: INFO
+  access_log: false

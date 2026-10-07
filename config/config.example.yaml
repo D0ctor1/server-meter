@@ -1,0 +1,82 @@
+# server-meter configuration
+# Copy to config.yaml or /etc/server-meter/config.yaml and edit.
+# The application NEVER writes this file back to disk.
+# Sensor history is RAM-only and is discarded on restart.
+
+application:
+  name: server-meter
+  # production refuses empty auth and OpenAPI docs.
+  # CHANGE_ME is the factory password; the web UI warns until you change it.
+  environment: production
+
+web:
+  host: "0.0.0.0"
+  port: 8080
+  api_docs_enabled: false
+  health_public: true
+  max_request_bytes: 16384
+  auth:
+    enabled: true
+    username: "admin"
+    password: "CHANGE_ME"
+
+sensor:
+  type: "BME690"
+  # bme690 = official SensorAPI I²C driver + optional BSEC 3.x
+  # mock    = no hardware (development / CI)
+  # bme69x_python = optional community wrapper compiled against Bosch BSEC
+  driver: "bme690"
+  i2c:
+    bus: 1
+    address: 0x77   # 0x76 or 0x77
+  interval_seconds: 5
+  heater_temperature_c: 320
+  heater_duration_ms: 150
+  retry_initial_seconds: 2
+  retry_max_seconds: 30
+  i2c_timeout_seconds: 1.0
+  bsec:
+    enabled: true
+    # Absolute path to Bosch libalgobsec.so for Raspberry Pi 5 aarch64.
+    # Leave empty to search default locations. BSEC is NOT shipped.
+    library_path: ""
+    # Optional read-only BSEC config blob from the Bosch package.
+    config_blob_path: ""
+    # lp = 3 s (BSEC_SAMPLE_RATE_LP). ulp = 300 s.
+    sample_rate: "lp"
+    temperature_offset: 0.0
+    # Must stay false: BSEC state is RAM-only.
+    persist_state: false
+
+history:
+  max_samples: 10000
+  max_age_seconds: 86400
+  min_samples_keep: 64
+
+memory_protection:
+  enabled: true
+  warning_percent: 70
+  critical_percent: 80
+  emergency_percent: 90
+  warning_trim_fraction: 0.10
+  critical_trim_fraction: 0.25
+  emergency_trim_fraction: 0.50
+  check_interval_seconds: 15
+
+nagios:
+  enabled: true
+  sensor_max_age_seconds: 30
+  thresholds:
+    cpu_temperature_warning: 70
+    cpu_temperature_critical: 80
+    ram_usage_warning: 70
+    ram_usage_critical: 85
+    iaq_warning: 150
+    iaq_critical: 250
+    cpu_load_warning: 2.0
+    cpu_load_critical: 4.0
+
+logging:
+  level: INFO
+  # Access logs write to journald. Keep disabled to protect the SD card.
+  access_log: false

@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "server-meter"
+version = "1.0.0"
+description = "RAM-only BME690 / Raspberry Pi 5 environmental monitoring with FastAPI"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [{ name = "server-meter contributors" }]
+keywords = ["bme690", "bsec", "raspberry-pi", "monitoring", "fastapi", "nagios"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: No Input/Output (Daemon)",
+    "Framework :: FastAPI",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Monitoring",
+]
+dependencies = [
+    "fastapi>=0.115.0,<1.0.0",
+    "uvicorn>=0.32.0,<1.0.0",
+    "pydantic>=2.9.0,<3.0.0",
+    "PyYAML>=6.0.2,<7.0.0",
+    "smbus2>=0.4.3,<0.6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx>=0.27.0,<1.0.0",
+    "pytest>=8.3.0,<9.0.0",
+    "pytest-asyncio>=0.24.0,<1.0.0",
+]
+
+[project.scripts]
+server-meter = "server_meter.main:main"
+
+[tool.setuptools.packages.find]
+include = ["server_meter*"]
+
+[tool.setuptools.package-data]
+server_meter = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q --strict-markers"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"

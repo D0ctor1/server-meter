@@ -1,0 +1,66 @@
+[Unit]
+Description=server-meter BME690 RAM-only monitoring
+Documentation=file:///opt/server-meter/README.md
+After=network.target systemd-journald.socket
+Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=10
+
+[Service]
+Type=exec
+User=server-meter
+Group=server-meter
+SupplementaryGroups=i2c
+WorkingDirectory=/opt/server-meter
+RuntimeDirectory=server-meter
+RuntimeDirectoryMode=0750
+Environment=PYTHONPATH=/opt/server-meter
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/server-meter/venv/bin/python -m server_meter --config /etc/server-meter/config.yaml
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+KillSignal=SIGTERM
+TimeoutStartSec=60
+
+# Logging: journald only. Do not create application .log files.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=server-meter
+
+# Hardening. I²C and /sys thermal reads must remain possible.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectHostname=true
+ProtectClock=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0027
+MemoryDenyWriteExecute=false
+# Read-only /sys is enough for thermal/load metrics.
+ProtectKernelTunables=true
+# Device policy for I²C; /dev/null and urandom are implicit on most systemd versions.
+DevicePolicy=closed
+DeviceAllow=/dev/i2c-0 rw
+DeviceAllow=/dev/i2c-1 rw
+DeviceAllow=/dev/i2c-2 rw
+DeviceAllow=/dev/null rw
+DeviceAllow=/dev/urandom r
+DeviceAllow=/dev/random r
+# No writable application paths: config is read-only and history stays in RAM.
+ReadOnlyPaths=/opt/server-meter /etc/server-meter
+ReadWritePaths=
+
+[Install]
+WantedBy=multi-user.target
