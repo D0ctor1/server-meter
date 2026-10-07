@@ -18,7 +18,7 @@ Environment=PYTHONPATH=/opt/server-meter
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/opt/server-meter/venv/bin/python -m server_meter --config /etc/server-meter/config.yaml
-Restart=always
+Restart=on-failure
 RestartSec=3
 TimeoutStopSec=20
 KillSignal=SIGTERM

@@ -55,6 +55,9 @@ class Measurement:
     stabilization_status: int | None = None
     run_in_status: int | None = None
     sensor_status: SensorStatus = SensorStatus.OK
+    cpu_temperature: float | None = None
+    cpu_load: float | None = None
+    ram_usage: float | None = None
 
     def to_api_dict(self) -> dict[str, Any]:
         """JSON-friendly dict. Includes spec aliases eco2 / bvoc."""

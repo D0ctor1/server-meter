@@ -45,13 +45,15 @@ Práva **0700**, vlastník `nagios:nagios`. Heslo je ve skriptu.
 
 Instalátor:
 
-1. aktualizuje `check_server_meter.sh` a **ponechá** existující konfigurační blok,
-2. nainstaluje `server-meter.cfg` (command `$ARG1$`, host, služby) — vždy tentýž soubor, žádné `_2` / `_new`,
-3. pokud už existuje `host_name` stejného jména, `define host` nepřidá (`INCLUDE_HOST=auto`),
-4. do `nagios.cfg` přidá `cfg_file=` jen když tam ještě není,
-5. spustí `/usr/local/nagios/bin/nagios -v /usr/local/nagios/etc/nagios.cfg` (nebo detekovanou binárku),
-6. při chybě konfigurace **neprovádí** reload,
-7. při úspěchu reloaduje Nagios (`NAGIOS_RELOAD=0` reload přeskočí).
+1. zazálohuje existující plugin / `server-meter.cfg` / `nagios.cfg` (`*.bak.<timestamp>`), starší zálohy nemaže,
+2. aktualizuje `check_server_meter.sh` a **ponechá** existující konfigurační blok,
+3. nainstaluje chybějící objekty do `server-meter.cfg` (command `$ARG1$`, host, služby) — vždy tentýž soubor, žádné `_2` / `_new`; existující objekty jinde nepřepisuje (`WARNING: existing Nagios object detected`),
+4. pokud už existuje `host_name` stejného jména, `define host` nepřidá (`INCLUDE_HOST=auto`),
+5. detekuje PNP4Nagios / Nagiosgraph / `process_performance_data` a **neinstaluje** druhý grafovací stack,
+6. do `nagios.cfg` přidá `cfg_file=` jen když tam ještě není,
+7. spustí `/usr/local/nagios/bin/nagios -v /usr/local/nagios/etc/nagios.cfg` (nebo detekovanou binárku),
+8. při chybě konfigurace **neprovádí** reload,
+9. při úspěchu reloaduje Nagios (`NAGIOS_RELOAD=0` reload přeskočí).
 
 Upravte blok nahoře ve nainstalovaném skriptu:
 

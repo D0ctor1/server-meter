@@ -234,6 +234,8 @@ def monitoring_payload(request) -> dict[str, Any]:
         "bvoc_critical": th.bvoc.critical_high,
         "cpu_temperature_warning": th.cpu_temperature.warning_high,
         "cpu_temperature_critical": th.cpu_temperature.critical_high,
+        "cpu_load_warning": th.cpu_usage.warning_high,
+        "cpu_load_critical": th.cpu_usage.critical_high,
         "ram_warning": th.ram_usage.warning_high,
         "ram_critical": th.ram_usage.critical_high,
         "sensor_age_warning": th.sensor_unavailable.warning_high,

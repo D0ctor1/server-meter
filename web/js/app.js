@@ -25,8 +25,22 @@
     { key: "pressure", labelKey: "sensor.pressure", unit: "hPa" },
     { key: "gas_resistance", labelKey: "sensor.gas_resistance", helpKey: "sensor.help.gas_resistance", unit: "Ω" },
     { key: "iaq", labelKey: "sensor.iaq", helpKey: "sensor.help.iaq", unit: "IAQ" },
+    { key: "static_iaq", labelKey: "sensor.static_iaq", helpKey: "sensor.help.static_iaq", unit: "IAQ" },
     { key: "eco2", labelKey: "sensor.eco2", helpKey: "sensor.help.eco2", unit: "ppm" },
     { key: "bvoc", labelKey: "sensor.bvoc", helpKey: "sensor.help.bvoc", unit: "ppm" },
+    { key: "cpu_temperature", labelKey: "system.cpu_temperature", unit: "°C" },
+    { key: "cpu_load", labelKey: "system.cpu_load", unit: "%" },
+    { key: "ram_usage", labelKey: "system.ram_usage", unit: "%" },
+  ];
+
+  const HEALTH_ITEMS = [
+    { key: "bme690", labelKey: "health.bme690" },
+    { key: "bsec", labelKey: "health.bsec" },
+    { key: "i2c", labelKey: "health.i2c" },
+    { key: "sensor_data", labelKey: "health.sensor_data" },
+    { key: "smtp", labelKey: "health.smtp" },
+    { key: "ram_protection", labelKey: "health.ram_protection" },
+    { key: "web_api", labelKey: "health.web_api" },
   ];
 
   const state = {
@@ -258,13 +272,123 @@
       }
       if (sample.timestamp > state.lastTs) state.lastTs = sample.timestamp;
     }
-    const windowSec = Number($("history-window").value);
-    const cutoff = Date.now() - windowSec * 1000;
+    const windowVal = $("history-window").value;
+    if (windowVal !== "all") {
+      const cutoff = Date.now() - Number(windowVal) * 1000;
+      for (const chart of Object.values(state.charts)) {
+        const series = chart.data.datasets[0].data;
+        const idx = series.findIndex((p) => p.x >= cutoff);
+        if (idx > 0) series.splice(0, idx);
+      }
+    }
     for (const chart of Object.values(state.charts)) {
-      const series = chart.data.datasets[0].data;
-      const idx = series.findIndex((p) => p.x >= cutoff);
-      if (idx > 0) series.splice(0, idx);
       chart.update("none");
+    }
+    const empty = $("history-empty");
+    if (empty) {
+      const any = Object.values(state.charts).some((chart) => chart.data.datasets[0].data.length);
+      empty.hidden = any;
+    }
+  }
+
+  function fmtMem(bytes) {
+    if (!bytes && bytes !== 0) return "—";
+    return `${(Number(bytes) / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function renderHealth(payload) {
+    const root = $("health-grid");
+    const overall = $("system-health-overall");
+    if (!root || !payload) return;
+    const items = payload.items || {};
+    root.innerHTML = "";
+    for (const spec of HEALTH_ITEMS) {
+      const item = items[spec.key] || {};
+      const row = document.createElement("div");
+      row.className = "health-row";
+      const label = document.createElement("span");
+      label.textContent = t(spec.labelKey);
+      const value = document.createElement("span");
+      const status = item.status || "unknown";
+      value.className = stateClass(status);
+      if (spec.key === "sensor_data" && item.age_seconds != null) {
+        value.textContent = t("health.sensor_age", { age: Math.round(item.age_seconds) });
+      } else if (spec.key === "i2c" && item.bus) {
+        value.textContent = `${statusText(status)} · ${item.bus} · ${item.address || ""}`;
+      } else if (spec.key === "bsec" && item.version) {
+        value.textContent = `${statusText(status)} · ${item.version}`;
+      } else {
+        value.textContent = statusText(status === "off" ? "off" : status);
+      }
+      row.append(label, value);
+      root.appendChild(row);
+    }
+    const word = (payload.overall || "unknown").toUpperCase();
+    overall.textContent = word;
+    overall.className = `health-overall ${stateClass(payload.overall)}`;
+  }
+
+  function renderAlerts(alarms) {
+    const root = $("active-alerts");
+    if (!root) return;
+    root.innerHTML = "";
+    const entries = Object.entries(alarms || {}).filter(([, alarm]) => {
+      return alarm && (alarm.state === "WARNING" || alarm.state === "CRITICAL" || alarm.state === "NORMAL");
+    });
+    const active = entries.filter(([, alarm]) => alarm.state === "WARNING" || alarm.state === "CRITICAL");
+    if (!active.length) {
+      const empty = document.createElement("p");
+      empty.className = "hint";
+      empty.textContent = t("dashboard.no_alerts");
+      root.appendChild(empty);
+      return;
+    }
+    for (const [name, alarm] of active) {
+      const card = document.createElement("article");
+      card.className = `alert-card ${stateClass(alarm.state.toLowerCase())}`;
+      const kind = document.createElement("p");
+      kind.className = "alert-kind";
+      kind.textContent = alarm.state;
+      const metric = document.createElement("h3");
+      metric.textContent = t(`settings.metric.${name}`) === `settings.metric.${name}` ? name : t(`settings.metric.${name}`);
+      const value = document.createElement("p");
+      value.className = "alert-value";
+      value.textContent = alarm.value == null ? "—" : `${alarm.value} ${alarm.unit || ""}`.trim();
+      const since = document.createElement("p");
+      since.className = "meta";
+      since.textContent = alarm.since ? t("dashboard.since", { time: localTime(alarm.since) }) : "";
+      card.append(kind, metric, value, since);
+      root.appendChild(card);
+    }
+  }
+
+  function renderAlarmHistory(rows) {
+    const body = $("alarm-history-body");
+    if (!body) return;
+    body.innerHTML = "";
+    if (!rows || !rows.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 4;
+      td.textContent = t("alarms.empty");
+      tr.appendChild(td);
+      body.appendChild(tr);
+      return;
+    }
+    for (const row of rows) {
+      const tr = document.createElement("tr");
+      const time = document.createElement("td");
+      time.textContent = localTime(row.created_at);
+      const kind = document.createElement("td");
+      kind.textContent = row.kind;
+      kind.className = stateClass(String(row.kind).toLowerCase() === "recovery" ? "ok" : String(row.kind).toLowerCase());
+      const metric = document.createElement("td");
+      const key = `settings.metric.${row.metric}`;
+      metric.textContent = t(key) === key ? row.metric : t(key);
+      const value = document.createElement("td");
+      value.textContent = row.value == null ? "—" : `${row.value} ${row.unit || ""}`.trim();
+      tr.append(time, kind, metric, value);
+      body.appendChild(tr);
     }
   }
 
@@ -363,9 +487,20 @@
         used: fmtBytes(system.ram_used_bytes),
         total: fmtBytes(system.ram_total_bytes),
       });
+      const ramBanner = $("ram-banner");
+      if (ramBanner) {
+        const pressure = status.memory && status.memory.pressure;
+        ramBanner.hidden = !(pressure && pressure !== "normal");
+      }
+      renderHealth(status.system_health);
+      renderAlerts(status.alarms);
+      pollAlarmHistory();
       $("history-info").textContent = t("history.samples_in_ram", {
         count: status.history.samples,
         dropped: status.history.dropped_oldest,
+        memory: fmtMem(status.history.memory_bytes),
+        oldest: status.history.oldest_age_seconds == null ? "—" : i18n.formatDuration(status.history.oldest_age_seconds),
+        newest: status.history.newest_age_seconds == null ? "—" : i18n.formatDuration(status.history.newest_age_seconds),
       });
       if (status.history.samples < state.historyCount) resetCharts();
       state.historyCount = status.history.samples;
@@ -389,10 +524,18 @@
 
   async function pollHistory(initial) {
     try {
-      const windowSec = Number($("history-window").value);
-      const url = initial || state.lastTs === 0
-        ? `/api/history?seconds=${windowSec}&limit=${MAX_POINTS}`
-        : `/api/history?since=${state.lastTs}&limit=200`;
+      const windowVal = $("history-window").value;
+      let url;
+      if (windowVal === "all") {
+        url = (initial || state.lastTs === 0)
+          ? `/api/history?limit=${MAX_POINTS}`
+          : `/api/history?since=${state.lastTs}&limit=200`;
+      } else {
+        const windowSec = Number(windowVal);
+        url = initial || state.lastTs === 0
+          ? `/api/history?seconds=${windowSec}&limit=${MAX_POINTS}`
+          : `/api/history?since=${state.lastTs}&limit=200`;
+      }
       const payload = await getJson(url);
       if (initial) resetCharts();
       appendSamples(payload.samples || []);
@@ -423,8 +566,18 @@
     stopPolling();
     pollCurrent();
     pollHistory(true);
+    pollAlarmHistory();
     state.timerCurrent = setInterval(pollCurrent, POLL_CURRENT_MS);
     state.timerHistory = setInterval(() => pollHistory(false), POLL_HISTORY_MS);
+  }
+
+  async function pollAlarmHistory() {
+    try {
+      const payload = await getJson("/api/alarms/history?limit=50");
+      renderAlarmHistory(payload.alarms || []);
+    } catch (_err) {
+      // History table is optional; dashboard values still update.
+    }
   }
 
   async function tryExistingSession() {

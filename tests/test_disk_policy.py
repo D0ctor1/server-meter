@@ -31,6 +31,12 @@ def test_no_database_or_history_libraries():
         assert token not in text, f"forbidden persistence token {token}"
     users_py = (SRC / "users.py").read_text(encoding="utf-8")
     assert "sqlite3" in users_py
+    allowed_sqlite = {"users.py", "sqlite_state.py"}
+    for file in SRC.rglob("*.py"):
+        if file.name in allowed_sqlite:
+            continue
+        text = file.read_text(encoding="utf-8")
+        assert "sqlite3" not in text, f"sqlite3 must not appear in {file.relative_to(SRC)}"
     for folder in ("sensor", "storage", "monitoring"):
         other = _read_tree(SRC / folder)
         assert "sqlite3" not in other

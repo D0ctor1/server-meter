@@ -562,7 +562,7 @@ start_service() {
   fi
   local i
   for i in $(seq 1 45); do
-    if curl -fsS http://127.0.0.1:8080/api/health 2>/dev/null | grep -q '"status":"ok"'; then
+    if curl -fsS http://127.0.0.1:8080/api/health 2>/dev/null | grep -qE '"status":"(ok|healthy)"'; then
       ok
       if [[ -f /etc/systemd/journald.conf.d/server-meter-volatile.conf ]]; then
         systemctl restart systemd-journald 2>/dev/null || true
@@ -597,7 +597,7 @@ test_api() {
   local netrc
   netrc="$(write_netrc)"
   local current nagios hist
-  if ! curl -fsS http://127.0.0.1:8080/api/health 2>/dev/null | grep -q '"status":"ok"'; then
+  if ! curl -fsS http://127.0.0.1:8080/api/health 2>/dev/null | grep -qE '"status":"(ok|healthy)"'; then
     rm -f "${netrc}"
     fail "HTTP /api/health failed" "$(service_diagnostics)"
   fi

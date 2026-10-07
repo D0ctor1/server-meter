@@ -134,7 +134,7 @@ curl -sS -u admin:YOUR_PASSWORD http://127.0.0.1:8080/api/current
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/api/current
 ```
 
-Health: `{"status":"ok","service":"server-meter"}`.  
+Health: `{"status":"healthy","service":"server-meter"}`.  
 Current: HTTP 200 s `available` true/false.  
 Bez hesla: `401`.
 

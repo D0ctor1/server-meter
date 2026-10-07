@@ -40,26 +40,23 @@ Password: CHANGE_ME
 
 ## ⚠️ IMPORTANT – CHANGE DEFAULT PASSWORD
 
-Change the password in:
+Sign in as `admin` / `CHANGE_ME`, open **Settings → Users**, and change the password there. Accounts live in SQLite (`/var/lib/server-meter/users.db`); YAML `web.auth.password` is only used once to create the first admin.
 
-```text
-/etc/server-meter/config.yaml
-```
+## Users and admin
 
-```yaml
-web:
-  auth:
-    username: "admin"
-    password: "CHANGE_ME"
-```
+Roles are enforced on the API, not only in the browser:
 
-Then:
+- **admin** — dashboard, Settings (gear), SMTP, thresholds, users, diagnostics, config export, monitoring token
+- **user** — dashboard, values, charts, alarm history (read-only). `/api/admin/*` and `/api/settings` return **403**
 
-```bash
-sudo systemctl restart server-meter
-```
+There is no limit on the number of accounts. The last active admin cannot be removed.
 
-That is the only manual configuration step.
+## Health, history, alarms
+
+- `GET /api/health` is liveness only: `{"status":"healthy","service":"server-meter"}`
+- `GET /api/monitoring` is the Nagios JSON (English keys, RAM snapshot, `sensor_age_seconds`)
+- Sensor history is RAM-only (empty after reboot). Alarm history is capped SQLite, never passwords or SMTP secrets
+- SMTP WARNING / CRITICAL / RECOVERY keep hysteresis, minimum duration, cooldown and recovery. SMTP failure does not stop the sensor loop
 
 ## Localization
 
@@ -114,12 +111,12 @@ sudo ./uninstall.sh
 
 ## What you get
 
-- dashboard (temperature, humidity, pressure, gas, IAQ, eCO2, bVOC, Pi CPU/RAM)
-- Settings (gear, **admin** only) for users, SMTP / email anomaly alerts
-- SQLite user accounts (`admin` / `user`); sensor history stays in RAM
-- REST API including `GET /api/monitoring`
-- Nagios Core: one self-contained `check_server_meter.sh` (curl only; no extra plugin config file). `$ARG1$` selects the metric so each value is its own Nagios service and performance-data series.
-- history and alarm state **only in RAM** (empty after reboot — by design)
+- dashboard: SYSTEM HEALTH, live values, RAM charts (15 min / 1 h / 6 h / 24 h / All), active alerts, alarm history
+- Settings (gear, **admin** only) for users, SMTP, thresholds, diagnostics, config export (secrets REDACTED), optional Nagios monitoring token
+- SQLite for accounts and alarm history only; **sensor samples stay in RAM**
+- REST API including language-neutral `GET /api/monitoring` and liveness `GET /api/health` (`{"status":"healthy"}`)
+- Nagios Core 4.4.5: one self-contained `check_server_meter.sh` (curl only; no extra plugin config file). `$ARG1$` selects the metric; no argument remains the overall health check
+- RAM protection trims oldest samples under memory pressure and never writes them to the SD card
 
 ## Nagios Core 4.4.5
 
@@ -152,12 +149,14 @@ sudo ./scripts/install_nagios_plugin.sh
 
 The installer:
 
-1. Updates `/usr/local/nagios/libexec/check_server_meter.sh` when that directory exists, otherwise `/usr/lib/nagios/plugins/check_server_meter.sh`. Override with `PLUGIN_DIR`.
-2. Preserves the configuration block already in the installed script (URL/password/thresholds).
-3. Installs `server-meter.cfg` (command + host + services) into the Nagios objects directory. Re-running overwrites that same file — no `check_server_meter_2`.
-4. Skips `define host` when `host_name server-meter` already exists (`INCLUDE_HOST=auto`).
-5. Adds `cfg_file=` to `nagios.cfg` only when that path is not already included.
-6. Runs `$NAGIOS_BIN -v $NAGIOS_CFG` (default `/usr/local/nagios/bin/nagios -v /usr/local/nagios/etc/nagios.cfg`). On failure it does **not** reload. On success it reloads Nagios (`NAGIOS_RELOAD=0` to skip).
+1. Backs up the existing plugin, `server-meter.cfg` and `nagios.cfg` (`*.bak.<timestamp>`). Older backups are kept.
+2. Updates `/usr/local/nagios/libexec/check_server_meter.sh` when that directory exists, otherwise `/usr/lib/nagios/plugins/check_server_meter.sh`. Override with `PLUGIN_DIR`.
+3. Preserves the configuration block already in the installed script (URL/password/thresholds).
+4. Installs missing objects into `server-meter.cfg` (command + host + services). Re-running updates that same file — no `check_server_meter_2`. Existing hosts/commands/services defined elsewhere are left alone (`WARNING: existing Nagios object detected`).
+5. Skips `define host` when `host_name server-meter` already exists (`INCLUDE_HOST=auto`).
+6. Adds `cfg_file=` to `nagios.cfg` only when that path is not already included.
+7. Detects PNP4Nagios / Nagiosgraph / `process_performance_data=1` and does **not** install a second graphing stack.
+8. Runs `$NAGIOS_BIN -v $NAGIOS_CFG` (default `/usr/local/nagios/bin/nagios -v /usr/local/nagios/etc/nagios.cfg`). On failure it does **not** reload. On success it reloads Nagios (`NAGIOS_RELOAD=0` to skip).
 
 Mode **0700**, owner `nagios:nagios`. The password is in the script.
 

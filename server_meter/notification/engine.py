@@ -45,6 +45,10 @@ class NotificationEngine:
         self._task: asyncio.Task[None] | None = None
         self.last_delivery_error: str | None = None
         self.delivery_ok = True
+        self._history = None
+
+    def set_history(self, history) -> None:
+        self._history = history
 
     def replace_config(self, config: AppConfig) -> None:
         self.config = config
@@ -209,9 +213,11 @@ class NotificationEngine:
         if elapsed < spec.min_duration_seconds:
             return
         previous = alarm.state
+        open_for = max(0, int(elapsed))
         alarm.state = desired
         alarm.since = now
         alarm.pending = None
+        self._record_history(name, spec, alarm, previous, now, duration_seconds=open_for)
         self._maybe_email(name, spec, alarm, previous, now)
 
     def _maybe_email(
@@ -282,6 +288,46 @@ class NotificationEngine:
         alarm.last_email_state = alarm.state
         alarm.last_email_at = now
 
+    def _record_history(
+        self,
+        name: str,
+        spec: MetricThreshold,
+        alarm: MetricAlarm,
+        previous: AlarmState,
+        now: float,
+        *,
+        duration_seconds: int,
+    ) -> None:
+        if self._history is None:
+            return
+        if alarm.state == previous:
+            return
+        if alarm.state == AlarmState.NORMAL and previous not in {AlarmState.WARNING, AlarmState.CRITICAL}:
+            return
+        if alarm.state not in {AlarmState.NORMAL, AlarmState.WARNING, AlarmState.CRITICAL}:
+            return
+        kind = "RECOVERY" if alarm.state == AlarmState.NORMAL else alarm.state.value
+        unit = METRIC_UNITS.get(name, "")
+        if kind == "CRITICAL":
+            threshold = _fmt_bounds(spec.critical_high, spec.critical_low, unit)
+        elif kind == "WARNING":
+            threshold = _fmt_bounds(spec.warning_high, spec.warning_low, unit)
+        else:
+            threshold = _fmt_bounds(spec.warning_high, spec.warning_low, unit)
+        try:
+            self._history.append(
+                kind=kind,
+                metric=name,
+                value=alarm.last_value,
+                unit=unit,
+                threshold=threshold,
+                duration_seconds=duration_seconds,
+                hostname=socket.gethostname(),
+                created_at=now,
+            )
+        except Exception:
+            logger.exception("alarm history write failed; measurement loop continues")
+
     def _format_alert_body(
         self,
         locale: str,
@@ -311,6 +357,13 @@ class NotificationEngine:
             "",
             f"{t(locale, 'body.value')}:",
             value_txt,
+            "",
+            f"{t(locale, 'body.threshold')}:",
+            _fmt_bounds(
+                spec.critical_high if kind == "CRITICAL" else spec.warning_high,
+                spec.critical_low if kind == "CRITICAL" else spec.warning_low,
+                unit,
+            ),
             "",
             f"{t(locale, 'body.warning_threshold')}:",
             _fmt_bounds(spec.warning_high, spec.warning_low, unit),

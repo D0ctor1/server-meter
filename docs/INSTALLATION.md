@@ -535,7 +535,7 @@ curl http://127.0.0.1:8080/api/health
 **Očekávaný výsledek:**
 
 ```json
-{"status":"ok","service":"server-meter"}
+{"status":"healthy","service":"server-meter"}
 ```
 
 Aktuální měření (Basic Auth):
