@@ -12,6 +12,15 @@ def test_example_mock_yaml_loads(example_yaml):
     assert cfg.application.environment == "development"
 
 
+def test_example_production_yaml_allows_factory_password():
+    from pathlib import Path
+
+    cfg = load_config(Path(__file__).resolve().parent.parent / "config" / "config.example.yaml")
+    assert cfg.application.environment == "production"
+    assert cfg.web.auth.password == "CHANGE_ME"
+    assert cfg.public_status_dict()["default_password_active"] is True
+
+
 def test_i2c_address_hex_and_int():
     for raw in (0x76, 0x77, "0x76", "0x77", 118, 119):
         cfg = make_config()
@@ -31,10 +40,19 @@ def test_invalid_i2c_address():
             raise ConfigError(str(exc)) from exc
 
 
-def test_production_rejects_change_me():
+def test_production_allows_factory_password():
     data = make_config().model_dump()
     data["application"]["environment"] = "production"
     data["web"]["auth"]["password"] = "CHANGE_ME"
+    data["web"]["api_docs_enabled"] = False
+    cfg = AppConfig.model_validate(data)
+    assert cfg.public_status_dict()["default_password_active"] is True
+
+
+def test_production_rejects_short_password():
+    data = make_config().model_dump()
+    data["application"]["environment"] = "production"
+    data["web"]["auth"]["password"] = "short"
     data["web"]["api_docs_enabled"] = False
     with pytest.raises(Exception):
         AppConfig.model_validate(data)
@@ -96,8 +114,9 @@ def test_public_status_hides_password():
     public = cfg.public_status_dict()
     blob = str(public)
     assert "secret123" not in blob
-    assert "password" not in blob
+    assert "password" not in public
     assert public["auth_enabled"] is True
+    assert public["default_password_active"] is False
 
 
 def test_bsec_persist_state_forbidden():

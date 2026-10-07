@@ -35,9 +35,10 @@ V `environment: production`:
 
 - `auth.enabled` musí být `true`
 - username nesmí být prázdný
-- password nesmí být prázdné, nesmí být `CHANGE_ME`, minimálně **8 znaků**
+- password nesmí být prázdné, minimálně **8 znaků**
+- `CHANGE_ME` je tovární heslo; po instalaci ho změňte a proveďte `sudo systemctl restart server-meter`
 
-Heslo **není** ve zdrojovém kódu. `CHANGE_ME` v `config.example.yaml` je zástupný symbol, který production **odmítne**.
+Heslo **není** ve zdrojovém kódu. `CHANGE_ME` v `config.example.yaml` je výchozí hodnota, kterou UI označí jako aktivní tovární heslo.
 
 Prohlížeč i `curl -u` posílají údaje v každém požadavku. Na Wi-Fi kavárny nebo internet to bez TLS nepoužívejte.
 

@@ -20,9 +20,10 @@ def test_status_hides_secrets(client, auth):
     assert response.status_code == 200
     body = response.text
     assert "secret123" not in body
-    assert "password" not in body
     payload = response.json()
+    assert "password" not in payload["application"]
     assert payload["application"]["auth_enabled"] is True
+    assert payload["application"]["default_password_active"] is False
     assert payload["history"]["samples"] >= 0
 
 

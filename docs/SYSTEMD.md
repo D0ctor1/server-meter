@@ -240,7 +240,7 @@ Nevytvářejte runtime soubory v `/opt/server-meter`. Pokud byste unit upravili 
 
 `StartLimitIntervalSec=60`, `StartLimitBurst=5`, `Restart=always`.
 
-Když YAML obsahuje `CHANGE_ME` v production, proces končí kódem **2**. Systemd ho restartuje, až narazí na limit → `failed`.
+Když YAML obsahuje prázdné nebo příliš krátké heslo, proces končí kódem **2**. Systemd ho restartuje, až narazí na limit → `failed`. Tovární `CHANGE_ME` (9 znaků) start **povolí**.
 
 ### Ověř
 
@@ -249,7 +249,7 @@ systemctl status server-meter --no-pager
 journalctl -u server-meter --no-pager -n 50
 ```
 
-Hledejte `server-meter configuration error` nebo `CHANGE_ME`.
+Hledejte `server-meter configuration error`.
 
 Opravte YAML, pak:
 

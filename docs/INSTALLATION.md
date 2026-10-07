@@ -1,8 +1,22 @@
 # Instalace server-meter od čistého Ubuntu
 
+**Běžný postup je jeden příkaz.** Po zapojení BME690 (Pi vypnuté, viz [HARDWARE.md](HARDWARE.md)):
+
+```bash
+git clone https://github.com/D0ctor1/server-meter.git
+cd server-meter
+sudo ./install.sh
+```
+
+Skript nainstaluje závislosti, zapne I²C, najde BME690 (chip ID `0x61` na `0x76`/`0x77`), vytvoří uživatele, venv, YAML, systemd, volatile journald a spustí službu. Heslo v YAML **nesmaže** při opakovaném spuštění.
+
+Jediný ruční zásah po úspěchu: změnit `password: CHANGE_ME` v `/etc/server-meter/config.yaml` a `sudo systemctl restart server-meter`.
+
+Níže je referenční popis toho, co instalátor dělá, plus Ubuntu z Imageru.
+
 Tento návod předpokládá **Raspberry Pi 5 (4 GB)**, **Kingston Industrial 16 GB microSD** a **Ubuntu Server 26.04.1 LTS 64-bit (ARM64)**.
 
-Cíl: po posledním kroku otevřete v prohlížeči `http://RPI_IP:8080/` a uvidíte dashboard.
+Cíl: po `install.sh` otevřete v prohlížeči `http://RPI_IP:8080/` a uvidíte dashboard.
 
 `RPI_IP` je příklad — vždy použijte výstup `hostname -I`.
 
@@ -342,7 +356,7 @@ Všechny tyto soubory musí existovat.
 
 ## 8. Instalační skript (uživatel, venv, systemd unit)
 
-Skript `scripts/install.sh` **skutečně** dělá toto:
+Hlavní vstup je kořenový **`./install.sh`** (wrapper `scripts/install.sh` ho jen spustí). Skript **skutečně** dělá toto:
 
 - nainstaluje `python3`, `python3-venv`, `python3-dev`, `python3-pip`, `build-essential`, `i2c-tools`, `adduser`
 - vytvoří systémového uživatele `server-meter`
@@ -440,9 +454,9 @@ sensor:
     persist_state: false
 ```
 
-`YOUR_PASSWORD` musí mít v production **alespoň 8 znaků** a **nesmí** být `CHANGE_ME`. Jinak proces skončí s kódem 2.
+`YOUR_PASSWORD` musí mít v production **alespoň 8 znaků**. Tovární `CHANGE_ME` službu spustí; změňte ho a restartujte unit.
 
-Výchozí example má `address: 0x77`. Pokud `i2cdetect` ukázal `76`, musíte to přepsat.
+Adresu I²C nastaví `install.sh` podle chip ID. Ruční přepis je potřeba jen když senzor vyměníte.
 
 Kompletní vysvětlení klíčů: [CONFIGURATION.md](CONFIGURATION.md).
 
@@ -492,11 +506,13 @@ Web **musí** i tehdy naslouchat na 8080.
 
 ### Pokud start selže na hesle
 
+Prázdné nebo kratší než 8 znaků:
+
 ```text
-server-meter configuration error: Invalid configuration: ... CHANGE_ME
+server-meter configuration error: ...
 ```
 
-Upravte YAML a zkuste znovu.
+Tovární `CHANGE_ME` je platné. Po změně hesla: `sudo systemctl restart server-meter`.
 
 Ukončení ručního běhu: `Ctrl+C`. Nic se na disk nezapíše.
 

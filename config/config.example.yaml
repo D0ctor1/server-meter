@@ -5,7 +5,8 @@
 
 application:
   name: server-meter
-  # production refuses CHANGE_ME passwords, empty auth, and OpenAPI docs.
+  # production refuses empty auth and OpenAPI docs.
+  # CHANGE_ME is the factory password; the web UI warns until you change it.
   environment: production
 
 web:

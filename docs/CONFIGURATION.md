@@ -119,7 +119,8 @@ V `production`:
 
 - `web.api_docs_enabled` musí být `false`
 - `web.auth.enabled` musí být `true`
-- heslo nesmí být prázdné, `CHANGE_ME`, ani kratší než 8 znaků
+- heslo nesmí být prázdné ani kratší než 8 znaků
+- `CHANGE_ME` je tovární heslo (instalátor s ním službu spustí); UI zobrazí `default_password_active`
 
 `test` vypíná automatickou měřicí smyčku v `create_app` (pro pytest).
 
@@ -136,7 +137,7 @@ V `production`:
 | `auth.username` | uživatel | `admin` |
 | `auth.password` | heslo (jen YAML, ne zdrojáky) | `CHANGE_ME` |
 
-Heslo **nikdy** není v API odpovědích (`public_status_dict` vrací jen `auth_enabled`).
+Heslo **nikdy** není v API odpovědích (`public_status_dict` vrací `auth_enabled` a boolean `default_password_active`, nikoli plaintext).
 
 Basic Auth **bez TLS nešifruje** heslo. Viz [SECURITY.md](SECURITY.md).
 

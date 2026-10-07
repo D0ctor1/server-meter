@@ -207,12 +207,10 @@ class AppConfig(BaseModel):
                 raise ConfigError("web.auth.username is empty")
             if not auth.password:
                 raise ConfigError("web.auth.password is empty")
-            if auth.password == DEFAULT_PASSWORD_PLACEHOLDER:
-                raise ConfigError(
-                    "web.auth.password is still CHANGE_ME; set a real password before production start"
-                )
             if len(auth.password) < 8:
                 raise ConfigError("web.auth.password must be at least 8 characters in production")
+            # CHANGE_ME is allowed so install.sh can start the service unattended.
+            # The UI flags default_password_active; change it after first login.
         if self.sensor.driver == "bme690" and self.sensor.type.upper() not in {"BME690", "BME69X"}:
             raise ConfigError("sensor.type must be BME690 when driver is bme690")
         if self.sensor.bsec.enabled and self.sensor.bsec.sample_rate == "lp":
@@ -249,6 +247,7 @@ class AppConfig(BaseModel):
             "memory_protection": self.memory_protection.enabled,
             "api_docs_enabled": self.web.api_docs_enabled,
             "auth_enabled": self.web.auth.enabled,
+            "default_password_active": self.web.auth.password == DEFAULT_PASSWORD_PLACEHOLDER,
         }
 
 

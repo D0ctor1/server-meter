@@ -26,6 +26,15 @@ Heslo se **neposílá v URL**.
 
 Bez správných údajů API vrací **401**. UI po 401 zobrazí text „Authentication required“.
 
+Pokud je v YAML stále `password: CHANGE_ME`, dashboard zobrazí žlutý pruh:
+
+```text
+Default password is active.
+Please change the password in: /etc/server-meter/config.yaml
+```
+
+API příznak: `application.default_password_active` (boolean, heslo se neposílá).
+
 TLS se v aplikaci **není**. Na nedůvěryhodné síti použijte reverse proxy — [SECURITY.md](SECURITY.md).
 
 Statické soubory `/css/style.css`, `/js/app.js`, `/vendor/chart.umd.min.js` autentizaci **nevyžadují** (tak je to v `server_meter/app.py`).
@@ -47,7 +56,7 @@ Soubory: `web/index.html`, `web/js/app.js`. Texty UI jsou **anglicky**.
 
 Barvy: zelená OK, žlutá varování (CPU ≥ 70 °C, RAM ≥ 70 %), červená (CPU ≥ 80 °C, RAM ≥ 85 %, sensor unavailable).
 
-### Aktuální hodnoty (osm karet)
+### Aktuální hodnoty
 
 | Karta | JSON pole | Jednotka v UI |
 |---|---|---|
@@ -57,6 +66,8 @@ Barvy: zelená OK, žlutá varování (CPU ≥ 70 °C, RAM ≥ 70 %), červená 
 | Gas resistance | `gas_resistance` | kΩ (API je v Ω, UI dělí 1000) |
 | IAQ | `iaq` | 0–500 |
 | IAQ accuracy | `iaq_accuracy` | 0–3 + popisek |
+| Static IAQ | `static_iaq` | BSEC, jinak — |
+| Static IAQ accuracy | `static_iaq_accuracy` | 0–3 + popisek |
 | eCO2 | `eco2` | ppm |
 | bVOC | `bvoc` | ppm |
 

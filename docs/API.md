@@ -33,7 +33,7 @@ Když `web.auth.enabled: true` a chybí nebo nesouhlasí údaje:
 
 Když `web.health_public: false`, i `/api/health` vyžaduje stejné Basic Auth.
 
-V `environment: production` musí být auth zapnuté a heslo nesmí být `CHANGE_ME` (validace v `AppConfig`).
+V `environment: production` musí být auth zapnuté. Tovární heslo `CHANGE_ME` je povoleno, aby `install.sh` mohl službu spustit; UI na něj upozorní (`default_password_active`).
 
 > HTTP Basic Authentication přes nešifrované HTTP neposkytuje šifrování hesla. Viz [SECURITY.md](SECURITY.md).
 

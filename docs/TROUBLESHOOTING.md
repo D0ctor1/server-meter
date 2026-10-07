@@ -294,7 +294,7 @@ journalctl -u server-meter --no-pager -n 100
 
 | Log | Náprava |
 |---|---|
-| `CHANGE_ME` / password too short | YAML heslo |
+| password too short / empty | YAML `web.auth.password` (min. 8 znaků) |
 | `No configuration file found` | `/etc/server-meter/config.yaml` |
 | `Address already in use` | cizí proces na 8080 |
 | `Failed to start` limit burst | `sudo systemctl reset-failed server-meter` po opravě |

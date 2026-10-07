@@ -29,6 +29,23 @@ body { max-width: 1280px; margin: 0 auto; padding: 24px 20px 48px; }
 h1 { margin: 4px 0 0; font-size: 32px; font-weight: 650; }
 .clock { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 20px; }
 
+.banner {
+  background: rgba(245, 193, 74, 0.12);
+  border: 1px solid var(--warn);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+.banner code {
+  display: inline-block;
+  background: var(--panel);
+  padding: 1px 6px;
+  border-radius: 6px;
+  color: var(--warn);
+}
+
 .status-grid, .cards, .charts {
   display: grid;
   gap: 14px;

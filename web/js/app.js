@@ -10,6 +10,8 @@
     { key: "gas_resistance", label: "Gas resistance", unit: "kΩ", digits: 1, scale: 0.001 },
     { key: "iaq", label: "IAQ", unit: "", digits: 0 },
     { key: "iaq_accuracy", label: "IAQ accuracy", unit: "", digits: 0 },
+    { key: "static_iaq", label: "Static IAQ", unit: "", digits: 0 },
+    { key: "static_iaq_accuracy", label: "Static IAQ accuracy", unit: "", digits: 0 },
     { key: "eco2", label: "eCO2", unit: "ppm", digits: 0 },
     { key: "bvoc", label: "bVOC", unit: "ppm", digits: 3 },
   ];
@@ -87,7 +89,7 @@
     for (const spec of CARDS) {
       const raw = current ? current[spec.key] : null;
       const node = $(`val-${spec.key}`);
-      if (spec.key === "iaq_accuracy") {
+      if (spec.key === "iaq_accuracy" || spec.key === "static_iaq_accuracy") {
         node.textContent = raw === null || raw === undefined ? "—" : `${raw} (${accuracyText(raw)})`;
       } else {
         node.textContent = fmt(raw, spec.digits, spec.scale || 1);
@@ -181,8 +183,14 @@
         getJson("/api/current"),
         getJson("/api/system"),
       ]);
+      const banner = $("password-banner");
+      if (banner) {
+        banner.hidden = !status.application.default_password_active;
+      }
       setText("server-status", "online", "state-ok");
-      $("app-uptime").textContent = `app uptime ${Math.round(status.uptime_seconds || 0)}s`;
+      const hostUp = system.uptime_seconds;
+      const hostTxt = hostUp == null ? "—" : `${Math.round(hostUp)}s`;
+      $("app-uptime").textContent = `app ${Math.round(status.uptime_seconds || 0)}s · host ${hostTxt}`;
       const sensorState = status.sensor.status;
       setText("sensor-status", sensorState, stateClass(sensorState));
       const age = status.sensor.age_seconds;
