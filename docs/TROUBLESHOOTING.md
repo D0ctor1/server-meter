@@ -10,6 +10,28 @@ VYPNI RASPBERRY PI A ODPOJ NAPÁJENÍ.
 
 ---
 
+## `SystemError: buffer overflow` při detekci (Python 3.14)
+
+`smbus2.SMBus()` na Ubuntu 26.04 / Python 3.14 / ARM64 volá ioctl `I2C_FUNCS` se 4bajtovým bufferem; jádro zapisuje 8 bajtů. To **není** špatné zapojení.
+
+Oprava je v `server_meter/sensor/i2c_bus.py` (otevření `/dev/i2c-*` bez tohoto ioctl) a detekce jde přes `i2cget`. Aktualizujte kód a znovu:
+
+```bash
+cd ~/server-meter
+sudo ./install.sh
+```
+
+Ověření chip ID bez Pythonu:
+
+```bash
+sudo i2cget -y 1 0x76 0xD0 b
+sudo i2cget -y 1 0x77 0xD0 b
+```
+
+Očekávané: `0x61`.
+
+---
+
 ## BME690 není detekován
 
 ### Proveď

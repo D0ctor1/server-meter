@@ -269,24 +269,54 @@ clear_resume() {
   systemctl daemon-reload >/dev/null 2>&1 || true
 }
 
+read_chip_id() {
+  local bus="$1"
+  local addr="$2"
+  local chip
+  chip="$(i2cget -y "${bus}" "${addr}" 0xD0 b 2>/dev/null || true)"
+  if [[ -z "${chip}" ]]; then
+    chip="$(i2cget -y -f "${bus}" "${addr}" 0xD0 b 2>/dev/null || true)"
+  fi
+  printf '%s\n' "${chip,,}"
+}
+
 detect_bme690() {
   step 5 "Detecting BME690"
-  local scan_json
-  scan_json="$("$(python_bin)" "${PREFIX}/scripts/probe_bme690.py" --scan --buses 1,0,2 || true)"
-  DETECTED_BUS="$(printf '%s' "${scan_json}" | "$(python_bin)" -c 'import json,sys
+  DETECTED_BUS=""
+  DETECTED_ADDR=""
+  local bus addr chip
+  for bus in 1 0 2; do
+    if [[ ! -e "/dev/i2c-${bus}" ]]; then
+      continue
+    fi
+    for addr in 0x76 0x77; do
+      chip="$(read_chip_id "${bus}" "${addr}")"
+      if [[ "${chip}" == "0x61" ]]; then
+        DETECTED_BUS="${bus}"
+        DETECTED_ADDR="${addr}"
+        break 2
+      fi
+    done
+  done
+  if [[ -z "${DETECTED_BUS}" || -z "${DETECTED_ADDR}" ]]; then
+    local scan_json
+    mkdir -p /run/server-meter
+    scan_json="$("$(python_bin)" "${PREFIX}/scripts/probe_bme690.py" --scan --buses 1,0,2 2>/run/server-meter/probe-scan.err || true)"
+    DETECTED_BUS="$(printf '%s' "${scan_json}" | "$(python_bin)" -c 'import json,sys
 try:
     d=json.load(sys.stdin)
 except Exception:
     d={}
 hits=d.get("found") or []
 print(hits[0]["bus"] if hits else "")')"
-  DETECTED_ADDR="$(printf '%s' "${scan_json}" | "$(python_bin)" -c 'import json,sys
+    DETECTED_ADDR="$(printf '%s' "${scan_json}" | "$(python_bin)" -c 'import json,sys
 try:
     d=json.load(sys.stdin)
 except Exception:
     d={}
 hits=d.get("found") or []
 print(hex(hits[0]["address"]) if hits else "")')"
+  fi
   if [[ -z "${DETECTED_BUS}" || -z "${DETECTED_ADDR}" ]]; then
     fail "BME690 NOT DETECTED" \
 "I2C bus: 1 (also scanned 0 and 2)

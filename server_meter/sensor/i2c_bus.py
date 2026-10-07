@@ -1,11 +1,37 @@
-"""Thin I²C wrapper around smbus2 with timeouts. No disk I/O."""
+"""Thin I²C wrapper around smbus2 with timeouts. No disk I/O.
+
+On Python 3.13+/3.14 (especially aarch64) smbus2.SMBus.open() calls ioctl
+I2C_FUNCS with a 4-byte buffer while the kernel writes an unsigned long
+(8 bytes). That raises SystemError: buffer overflow. We open /dev/i2c-N
+ourselves and skip that ioctl. i2c_rdwr still comes from smbus2.
+"""
 
 from __future__ import annotations
 
+import os
 import threading
 from types import TracebackType
 
 from server_meter.sensor.exceptions import SensorTimeoutError, SensorUnavailableError
+
+
+def open_smbus(bus_id: int):
+    """Return an smbus2.SMBus connected to /dev/i2c-{bus_id} without I2C_FUNCS."""
+    try:
+        from smbus2 import SMBus
+    except ImportError as exc:
+        raise SensorUnavailableError("smbus2 is required for the BME690 driver") from exc
+    path = f"/dev/i2c-{int(bus_id)}"
+    if not os.path.exists(path):
+        raise FileNotFoundError(path)
+    handle = SMBus()
+    try:
+        handle.fd = os.open(path, os.O_RDWR)
+    except OSError:
+        raise
+    # Pretend full capability; we only use I2C_RDWR.
+    handle.funcs = 0xFFFFFFFF
+    return handle
 
 
 class I2CBus:
@@ -18,11 +44,7 @@ class I2CBus:
 
     def open(self) -> None:
         try:
-            from smbus2 import SMBus
-        except ImportError as exc:
-            raise SensorUnavailableError("smbus2 is required for the BME690 driver") from exc
-        try:
-            self._bus = SMBus(self.bus_id)
+            self._bus = open_smbus(self.bus_id)
         except FileNotFoundError as exc:
             raise SensorUnavailableError(
                 f"I2C bus /dev/i2c-{self.bus_id} is not available. Enable I²C and check wiring."
