@@ -24,6 +24,9 @@ def test_auth_can_be_disabled_outside_production():
         assert client.get("/api/status").status_code == 200
 
 
-def test_ui_requires_auth(client):
-    assert client.get("/").status_code == 401
-    assert client.get("/", auth=("admin", "secret123")).status_code == 200
+def test_html_is_public_and_api_requires_auth(client):
+    html = client.get("/")
+    assert html.status_code == 200
+    assert "login-overlay" in html.text
+    assert client.get("/api/status").status_code == 401
+    assert client.get("/api/status", auth=("admin", "secret123")).status_code == 200

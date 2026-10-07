@@ -552,10 +552,10 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/api/current
 
 **Očekávaný výsledek:** `401`.
 
-HTML UI:
+HTML UI (veřejné, login formulář; data jsou za `/api/*`):
 
 ```bash
-curl -sS -o /dev/null -w '%{http_code}\n' -u admin:YOUR_PASSWORD http://127.0.0.1:8080/
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/
 ```
 
 **Očekávaný výsledek:** `200`.
@@ -582,7 +582,7 @@ V prohlížeči na jiném počítači ve stejné LAN:
 http://192.168.1.50:8080/
 ```
 
-Prohlížeč zobrazí HTTP Basic Auth (uživatel `admin`, heslo z YAML).
+Prohlížeč otevře lokalizovaný přihlašovací formulář (uživatel `admin`, heslo z YAML). Jazyk webu je `web.locale` (`CZ` výchozí).
 
 Pokud se stránka nenačte, zkontrolujte firewall: [SECURITY.md](SECURITY.md) a [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 

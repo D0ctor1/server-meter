@@ -41,6 +41,7 @@ application:
 web:
   host: "0.0.0.0"
   port: 8080
+  locale: "CZ"
   api_docs_enabled: false
   health_public: true
   max_request_bytes: 16384
@@ -130,6 +131,7 @@ V `production`:
 |---|---|---|
 | `host` | bind adresa | `0.0.0.0` |
 | `port` | TCP port | `8080` (1–65535) |
+| `locale` | jazyk webu: `CZ` (čeština) nebo `EN` (angličtina) | `CZ` |
 | `api_docs_enabled` | `/docs`, `/redoc`, `/openapi.json` | `false` |
 | `health_public` | `/api/health` bez hesla | `true` |
 | `max_request_bytes` | limit Content-Length | `16384` |
@@ -137,7 +139,23 @@ V `production`:
 | `auth.username` | uživatel | `admin` |
 | `auth.password` | heslo (jen YAML, ne zdrojáky) | `CHANGE_ME` |
 
-Heslo **nikdy** není v API odpovědích (`public_status_dict` vrací `auth_enabled` a boolean `default_password_active`, nikoli plaintext).
+`web.locale` ovládá **jen texty dashboardu** (`CZ` = čeština, `EN` = angličtina). REST API a Nagios zůstávají jazykově neutrální. Pokud klíč v YAML chybí, aplikace použije `CZ` — existující instalace se nemění a soubor se nepřepisuje. Nepovolená hodnota (např. `DE`) službu nespustí:
+
+```text
+Invalid locale 'DE'.
+
+Supported locales:
+- CZ
+- EN
+```
+
+Po změně locale:
+
+```bash
+sudo systemctl restart server-meter
+```
+
+Heslo **nikdy** není v API odpovědích (`public_status_dict` vrací `auth_enabled`, `locale` a boolean `default_password_active`, nikoli plaintext).
 
 Basic Auth **bez TLS nešifruje** heslo. Viz [SECURITY.md](SECURITY.md).
 

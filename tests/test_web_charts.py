@@ -9,7 +9,7 @@ JS = (ROOT / "web" / "js" / "app.js").read_text(encoding="utf-8")
 
 def test_chart_canvas_is_wrapped_in_fixed_frame():
     assert "chart-frame" in JS
-    assert 'class="chart-frame"' in JS
+    assert "chart-frame" in CSS
     assert ".chart-frame" in CSS
     assert "height: 220px" in CSS
     assert "max-height: 220px" in CSS

@@ -473,6 +473,8 @@ write_config() {
   step 7 "Creating server-meter"
   ensure_user_and_dirs
   ok
+  # Existing YAML is kept as-is (password, locale, bind address, …).
+  # Missing web.locale is not injected; the app defaults to CZ.
   step 8 "Creating configuration"
   "$(python_bin)" "${PREFIX}/scripts/write_initial_config.py" \
     --example "${PREFIX}/config/config.example.yaml" \

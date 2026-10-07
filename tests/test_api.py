@@ -119,6 +119,90 @@ def test_nagios_evaluation_error_is_unknown(client, auth, monkeypatch):
     assert response.text.startswith("UNKNOWN")
 
 
+def _locale_client(locale: str):
+    from tests.conftest import make_config
+    from server_meter.app import create_app
+    from server_meter.config import AppConfig
+    from server_meter.service import MeterService
+    from fastapi.testclient import TestClient
+
+    data = make_config().model_dump()
+    data["web"]["locale"] = locale
+    cfg = AppConfig.model_validate(data)
+    return TestClient(create_app(cfg, MeterService(cfg))), cfg
+
+
+def _json_keys(payload, prefix=""):
+    keys = set()
+    if isinstance(payload, dict):
+        for name, value in payload.items():
+            here = f"{prefix}{name}"
+            keys.add(here)
+            keys |= _json_keys(value, f"{here}.")
+    elif isinstance(payload, list) and payload:
+        keys |= _json_keys(payload[0], prefix)
+    return keys
+
+
+def test_api_json_is_language_neutral():
+    auth = ("admin", "secret123")
+    sample = Measurement(
+        timestamp=1_700_000_000.0,
+        temperature=24.3,
+        humidity=45.2,
+        pressure=1008.4,
+        gas_resistance=120000.0,
+        iaq=90.0,
+        iaq_accuracy=3,
+        co2_equivalent=450.0,
+        breath_voc_equivalent=0.4,
+        sensor_status=SensorStatus.OK,
+    )
+    collected = {}
+    for locale in ("CZ", "EN"):
+        client, _cfg = _locale_client(locale)
+        with client:
+            client.app.state.service.current = sample
+            client.app.state.service.sensor_status = SensorStatus.OK
+            collected[locale] = {
+                "status": client.get("/api/status", auth=auth).json(),
+                "current": client.get("/api/current", auth=auth).json(),
+                "system": client.get("/api/system", auth=auth).json(),
+                "sensor": client.get("/api/sensor", auth=auth).json(),
+                "history": client.get("/api/history", auth=auth).json(),
+            }
+    for locale, payload in collected.items():
+        assert payload["status"]["application"]["locale"] == locale
+        assert "teplota" not in str(payload).lower()
+        assert "temperature" in payload["current"]
+        assert "humidity" in payload["current"]
+        assert "pressure" in payload["current"]
+    cz_keys = {name: _json_keys(body) for name, body in collected["CZ"].items()}
+    en_keys = {name: _json_keys(body) for name, body in collected["EN"].items()}
+    assert cz_keys == en_keys
+
+
+def test_nagios_output_is_independent_of_web_locale():
+    auth = ("admin", "secret123")
+    bodies = {}
+    headers = {}
+    for locale in ("CZ", "EN"):
+        with _locale_client(locale)[0] as client:
+            response = client.get("/api/nagios/check", auth=auth)
+            assert response.status_code == 200
+            bodies[locale] = response.text
+            headers[locale] = (
+                response.headers.get("x-nagios-status"),
+                response.headers.get("x-nagios-state"),
+            )
+            assert "Teplota" not in response.text
+            assert "Varování" not in response.text
+            assert "Kritický" not in response.text
+            assert response.text.split(" ", 1)[0] in {"OK", "WARNING", "CRITICAL", "UNKNOWN"}
+    assert headers["CZ"] == headers["EN"]
+    assert bodies["CZ"].split(" - ", 1)[0] == bodies["EN"].split(" - ", 1)[0]
+
+
 def test_docs_disabled_in_factory():
     from tests.conftest import make_config
     from server_meter.app import create_app

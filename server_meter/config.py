@@ -10,12 +10,14 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 # Absolute hard cap: even a broken YAML cannot grow RAM without bound.
 HISTORY_HARD_MAX_SAMPLES = 20_000
 DEFAULT_PASSWORD_PLACEHOLDER = "CHANGE_ME"
 VALID_I2C_ADDRESSES = {0x76, 0x77}
+SUPPORTED_LOCALES = ("CZ", "EN")
+DEFAULT_LOCALE = "CZ"
 
 
 class ConfigError(ValueError):
@@ -46,6 +48,23 @@ class WebConfig(BaseModel):
     api_docs_enabled: bool = False
     health_public: bool = True
     max_request_bytes: int = Field(default=16_384, ge=1024, le=1_048_576)
+    # UI language only. Missing key → CZ so existing YAML keeps working.
+    locale: str = DEFAULT_LOCALE
+
+    @field_validator("locale", mode="before")
+    @classmethod
+    def validate_locale(cls, value: Any) -> str:
+        if value is None:
+            return DEFAULT_LOCALE
+        if isinstance(value, str) and not value.strip():
+            return DEFAULT_LOCALE
+        candidate = str(value).strip()
+        normalized = candidate.upper()
+        if normalized not in SUPPORTED_LOCALES:
+            raise ValueError(
+                f"Invalid locale '{candidate}'.\n\nSupported locales:\n- CZ\n- EN"
+            )
+        return normalized
 
 
 class I2CConfig(BaseModel):
@@ -248,6 +267,7 @@ class AppConfig(BaseModel):
             "api_docs_enabled": self.web.api_docs_enabled,
             "auth_enabled": self.web.auth.enabled,
             "default_password_active": self.web.auth.password == DEFAULT_PASSWORD_PLACEHOLDER,
+            "locale": self.web.locale,
         }
 
 
@@ -306,5 +326,18 @@ def _parse_yaml(path: Path) -> AppConfig:
         return AppConfig.model_validate(data)
     except ConfigError:
         raise
+    except ValidationError as exc:
+        raise _config_error_from_validation(exc) from exc
     except Exception as exc:
         raise ConfigError(f"Invalid configuration: {exc}") from exc
+
+
+def _config_error_from_validation(exc: ValidationError) -> ConfigError:
+    """Surface locale errors in the operator-facing wording from the spec."""
+    for err in exc.errors():
+        msg = err.get("msg", "")
+        if msg.startswith("Value error, "):
+            msg = msg[len("Value error, ") :]
+        if msg.startswith("Invalid locale"):
+            return ConfigError(msg)
+    return ConfigError(f"Invalid configuration: {exc}")

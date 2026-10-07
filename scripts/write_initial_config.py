@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Create /etc/server-meter/config.yaml or patch I²C keys. Never changes the password."""
+"""Create /etc/server-meter/config.yaml or patch I²C keys.
+
+Never changes the password, bind address, port, or web.locale.
+Missing locale is left missing; the application defaults to CZ.
+"""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="__LANG__" data-locale="__LOCALE__">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,73 +8,95 @@
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-  <div id="password-banner" class="banner" hidden>
-    Default password is active.
-    Please change the password in:
-    <code>/etc/server-meter/config.yaml</code>
-    then run
-    <code>sudo systemctl restart server-meter</code>
+  <div id="login-overlay" class="login-overlay" hidden>
+    <form id="login-form" class="login-card" autocomplete="on">
+      <h1 data-i18n="login.title">Přihlášení</h1>
+      <label>
+        <span data-i18n="login.username">Uživatelské jméno</span>
+        <input id="login-username" name="username" type="text" autocomplete="username" required>
+      </label>
+      <label>
+        <span data-i18n="login.password">Heslo</span>
+        <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <p id="login-error" class="login-error" role="alert" hidden></p>
+      <button type="submit" data-i18n="login.submit">Přihlásit</button>
+    </form>
   </div>
 
-  <header class="top">
-    <div>
-      <p class="eyebrow">Raspberry Pi 5 · BME690 · RAM-only</p>
-      <h1>server-meter</h1>
+  <div id="app" hidden>
+    <div id="password-banner" class="banner" hidden data-i18n-html="banner.default_password_html">
+      Je aktivní výchozí heslo. Změňte heslo v souboru
+      <code>/etc/server-meter/config.yaml</code>
+      a poté spusťte
+      <code>sudo systemctl restart server-meter</code>.
     </div>
-    <div class="clock" id="local-clock">--:--:--</div>
-  </header>
 
-  <section class="status-grid" id="status-grid">
-    <article class="status-card" data-key="server">
-      <h2>Server</h2>
-      <p class="big" id="server-status">starting</p>
-      <p class="meta" id="app-uptime">uptime —</p>
-    </article>
-    <article class="status-card" data-key="sensor">
-      <h2>Sensor</h2>
-      <p class="big" id="sensor-status">unknown</p>
-      <p class="meta" id="sensor-age">last sample —</p>
-    </article>
-    <article class="status-card" data-key="cpu">
-      <h2>CPU</h2>
-      <p class="big" id="cpu-temp">—</p>
-      <p class="meta" id="cpu-load">load — · freq —</p>
-    </article>
-    <article class="status-card" data-key="ram">
-      <h2>RAM</h2>
-      <p class="big" id="ram-usage">—</p>
-      <p class="meta" id="ram-detail">used — / —</p>
-    </article>
-  </section>
+    <header class="top">
+      <div>
+        <p class="eyebrow" data-i18n="app.eyebrow">Raspberry Pi 5 · BME690 · pouze RAM</p>
+        <h1 data-i18n="app.name">server-meter</h1>
+      </div>
+      <div class="top-actions">
+        <div class="clock" id="local-clock">--:--:--</div>
+        <button type="button" id="logout-button" class="logout" data-i18n="nav.logout">Odhlásit</button>
+      </div>
+    </header>
 
-  <section>
-    <h2 class="section-title">Current values</h2>
-    <div class="cards" id="value-cards"></div>
-  </section>
+    <section class="status-grid" id="status-grid">
+      <article class="status-card" data-key="server">
+        <h2 data-i18n="dashboard.server">Server</h2>
+        <p class="big" id="server-status" data-i18n="status.starting">Spouštění</p>
+        <p class="meta" id="app-uptime" data-i18n="system.uptime_placeholder">doba běhu —</p>
+      </article>
+      <article class="status-card" data-key="sensor">
+        <h2 data-i18n="dashboard.sensor">Senzor</h2>
+        <p class="big" id="sensor-status" data-i18n="status.unknown">Neznámý stav</p>
+        <p class="meta" id="sensor-age" data-i18n="sensor.no_sample">zatím žádné měření</p>
+      </article>
+      <article class="status-card" data-key="cpu">
+        <h2 data-i18n="dashboard.cpu">CPU</h2>
+        <p class="big" id="cpu-temp">—</p>
+        <p class="meta" id="cpu-load" data-i18n="system.cpu_load_placeholder">zátěž — · frekvence —</p>
+      </article>
+      <article class="status-card" data-key="ram">
+        <h2 data-i18n="dashboard.ram">RAM</h2>
+        <p class="big" id="ram-usage">—</p>
+        <p class="meta" id="ram-detail" data-i18n="system.ram_placeholder">použito — / —</p>
+      </article>
+    </section>
 
-  <section>
-    <div class="section-head">
-      <h2 class="section-title">History (RAM)</h2>
-      <label class="range">
-        Window
-        <select id="history-window">
-          <option value="900">15 min</option>
-          <option value="3600" selected>1 hour</option>
-          <option value="21600">6 hours</option>
-          <option value="86400">24 hours</option>
-        </select>
-      </label>
-    </div>
-    <p class="hint">Charts start empty after every reboot. Samples are never written to the SD card.</p>
-    <div class="charts" id="charts"></div>
-  </section>
+    <section>
+      <h2 class="section-title" data-i18n="dashboard.current_values">Aktuální hodnoty</h2>
+      <p id="values-error" class="hint values-error" hidden></p>
+      <div class="cards" id="value-cards"></div>
+    </section>
 
-  <footer>
-    <span>UTC timestamps internally · local time in the browser</span>
-    <span id="history-info">0 samples in RAM</span>
-  </footer>
+    <section>
+      <div class="section-head">
+        <h2 class="section-title" data-i18n="dashboard.history">Historie (RAM)</h2>
+        <label class="range">
+          <span data-i18n="dashboard.history_window">Okno</span>
+          <select id="history-window">
+            <option value="900" data-i18n="history.window_15m">15 min</option>
+            <option value="3600" selected data-i18n="history.window_1h">1 hodina</option>
+            <option value="21600" data-i18n="history.window_6h">6 hodin</option>
+            <option value="86400" data-i18n="history.window_24h">24 hodin</option>
+          </select>
+        </label>
+      </div>
+      <p class="hint" data-i18n="dashboard.history_hint">Grafy jsou po každém restartu prázdné. Vzorky se na SD kartu nikdy nezapisují.</p>
+      <div class="charts" id="charts"></div>
+    </section>
+
+    <footer>
+      <span data-i18n="dashboard.footer_time">Interně časová razítka UTC · v prohlížeči místní čas</span>
+      <span id="history-info" data-i18n="history.samples_placeholder">0 vzorků v RAM</span>
+    </footer>
+  </div>
 
   <script src="/vendor/chart.umd.min.js"></script>
+  <script src="/js/i18n.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

@@ -8,6 +8,8 @@ application:
 web:
   host: "0.0.0.0"
   port: 8080
+  # CZ = čeština, EN = angličtina. If omitted, the UI uses CZ.
+  locale: "CZ"
   api_docs_enabled: false
   health_public: true
   auth:

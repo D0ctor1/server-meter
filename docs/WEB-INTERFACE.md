@@ -18,39 +18,48 @@ Příklad: `http://192.168.1.50:8080/` — `192.168.1.50` je **příklad**.
 
 ## Přihlášení
 
-HTML `/` vyžaduje **HTTP Basic Authentication** (`web.auth.enabled: true`).
+HTML `/` je veřejné, aby šlo lokalizovat přihlašovací formulář. **Data měření** jdou jen přes HTTP Basic Auth na `/api/*` (`web.auth.enabled: true`).
 
-Prohlížeč zobrazí nativní dialog. Zadejte `web.auth.username` a `web.auth.password` z `/etc/server-meter/config.yaml`.
+Dashboard zobrazí formulář (CZ: Přihlášení / Uživatelské jméno / Heslo / Přihlásit). Zadejte `web.auth.username` a `web.auth.password` z `/etc/server-meter/config.yaml`. Špatné údaje: **Nesprávné uživatelské jméno nebo heslo** (EN: Invalid username or password).
 
-Heslo se **neposílá v URL**.
+Heslo se **neposílá v URL**. Prohlížeč ho drží v `sessionStorage` a posílá jako `Authorization: Basic` na API. Nagios a `curl -u` fungují stejně jako dřív.
 
-Bez správných údajů API vrací **401**. UI po 401 zobrazí text „Authentication required“.
+Bez správných údajů API vrací **401** (`{"detail":"Authentication required"}` / `Invalid credentials` — tyto JSON texty jsou součástí API a nemění se s locale).
 
-Pokud je v YAML stále `password: CHANGE_ME`, dashboard zobrazí žlutý pruh:
-
-```text
-Default password is active.
-Please change the password in: /etc/server-meter/config.yaml
-```
+Pokud je v YAML stále `password: CHANGE_ME`, dashboard zobrazí žlutý pruh (lokalizovaný podle `web.locale`).
 
 API příznak: `application.default_password_active` (boolean, heslo se neposílá).
 
 TLS se v aplikaci **není**. Na nedůvěryhodné síti použijte reverse proxy — [SECURITY.md](SECURITY.md).
 
-Statické soubory `/css/style.css`, `/js/app.js`, `/vendor/chart.umd.min.js` autentizaci **nevyžadují** (tak je to v `server_meter/app.py`).
+Statické soubory `/css/style.css`, `/js/app.js`, `/js/i18n.js`, `/vendor/chart.umd.min.js` autentizaci **nevyžadují** (tak je to v `server_meter/app.py`).
+
+---
+
+## Jazyk UI
+
+Jazyk určuje jen YAML, ne přepínač na stránce:
+
+```yaml
+web:
+  locale: "CZ"   # čeština (výchozí)
+# locale: "EN"   # angličtina
+```
+
+Chybějící klíč = `CZ`. Po změně `sudo systemctl restart server-meter`. Překlady jsou v `web/js/i18n.js`; `app.js` volá `t("sensor.temperature")` a podobné klíče. Jednotky (`°C`, `%`, `hPa`, `Ω`, `ppm`) a zkratky (BME690, BSEC, IAQ, eCO₂, bVOC, CPU, RAM) se nepřekládají. Datum a čas v prohlížeči jde přes `Intl.DateTimeFormat` (`cs-CZ` / `en-GB`). Interní API timestampy zůstávají unix time.
 
 ---
 
 ## Co dashboard skutečně zobrazuje
 
-Soubory: `web/index.html`, `web/js/app.js`. Texty UI jsou **anglicky**.
+Soubory: `web/index.html`, `web/js/app.js`, `web/js/i18n.js`. Texty UI jsou **česky** (`locale: CZ`) nebo **anglicky** (`locale: EN`).
 
 ### Stavový řádek (čtyři karty)
 
 | Karta | Zdroj API | Obsah |
 |---|---|---|
-| Server | `/api/status` | `online` / `unreachable`; app uptime v sekundách |
-| Sensor | `/api/status` | `ok`, `unavailable`, `initializing`, `error`, `unknown`; stáří vzorku |
+| Server | `/api/status` | stav `online` / `unreachable` (UI přeloží); app uptime v sekundách |
+| Sensor | `/api/status` | API: `ok`, `unavailable`, `initializing`, `error`, `unknown`; UI zobrazí lokalizovaný popisek; stáří vzorku |
 | CPU | `/api/system` | teplota °C, CPU %, load1, kmitočet MHz |
 | RAM | `/api/system` | využití %, used / total GiB |
 
@@ -60,20 +69,20 @@ Barvy: zelená OK, žlutá varování (CPU ≥ 70 °C, RAM ≥ 70 %), červená 
 
 | Karta | JSON pole | Jednotka v UI |
 |---|---|---|
-| Temperature | `temperature` | °C |
-| Humidity | `humidity` | % |
-| Pressure | `pressure` | hPa |
-| Gas resistance | `gas_resistance` | kΩ (API je v Ω, UI dělí 1000) |
+| Teplota / Temperature | `temperature` | °C |
+| Vlhkost / Humidity | `humidity` | % |
+| Tlak / Pressure | `pressure` | hPa |
+| Odpor plynu / Gas resistance | `gas_resistance` | kΩ (API je v Ω, UI dělí 1000) |
 | IAQ | `iaq` | 0–500 |
-| IAQ accuracy | `iaq_accuracy` | 0–3 + popisek |
-| Static IAQ | `static_iaq` | BSEC, jinak — |
-| Static IAQ accuracy | `static_iaq_accuracy` | 0–3 + popisek |
-| eCO2 | `eco2` | ppm |
+| Přesnost IAQ / IAQ accuracy | `iaq_accuracy` | 0–3 + lokalizovaný popisek |
+| Statické IAQ / Static IAQ | `static_iaq` | BSEC, jinak — |
+| Přesnost statického IAQ / Static IAQ accuracy | `static_iaq_accuracy` | 0–3 + lokalizovaný popisek |
+| eCO₂ | `eco2` | ppm |
 | bVOC | `bvoc` | ppm |
 
 Chybějící hodnota (typicky bez BSEC) = **—**.
 
-IAQ accuracy popisky v JS: `stabilizing` (0), `low` (1), `medium` (2), `high` (3).
+IAQ accuracy v API zůstává `stabilizing` / `low` / `medium` / `high`. UI to přeloží (CZ: stabilizace, nízká, střední, vysoká).
 
 ### Grafy (Chart.js, vendored 4.4.1)
 
@@ -115,7 +124,7 @@ Historie se smaže. Grafy jsou prázdné, dokud nedorazí nové vzorky (výchoz�
 
 > Prázdné grafy bezprostředně po restartu **nejsou chyba**.
 
-Patička: `UTC timestamps internally · local time in the browser`.
+Patička (CZ): `Interně časová razítka UTC · v prohlížeči místní čas`.
 
 ---
 

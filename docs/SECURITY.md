@@ -224,7 +224,7 @@ Health je ve výchozím stavu bez hesla; zbytek API heslo vyžaduje.
 
 ## Statické soubory bez hesla
 
-`/css`, `/js`, `/vendor` **nejsou** za Basic Auth (`app.py` mount StaticFiles). Útočník na síti si může stáhnout Chart.js a `app.js`. **Data měření** jdou jen přes autentizované `/api/*` a HTML `/`.
+`/`, `/css`, `/js`, `/vendor` **nejsou** za Basic Auth (`app.py` mount StaticFiles + veřejný HTML). Útočník na síti si může stáhnout Chart.js, `app.js` a přihlašovací formulář. **Data měření** jdou jen přes autentizované `/api/*`. Prohlížeč po přihlášení posílá Basic Auth z `sessionStorage`.
 
 To je známé omezení implementace, ne dokumentační omyl.
 

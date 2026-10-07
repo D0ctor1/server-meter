@@ -2,7 +2,7 @@
 
 Historii senzoru **nemigrujete**. Je jen v RAM a po restartu služby zmizí.
 
-YAML v `/etc/server-meter/config.yaml` `install.sh` **nepřepíše**, pokud už existuje.
+YAML v `/etc/server-meter/config.yaml` `install.sh` **nepřepíše**, pokud už existuje. Chybějící `web.locale` znamená české UI (`CZ`); instalátor locale do existujícího YAML nedoplňuje.
 
 ---
 

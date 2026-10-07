@@ -239,7 +239,7 @@ curl -u admin:YOUR_PASSWORD http://127.0.0.1:8080/api/current
 
 Heslo v YAML v uvozovkách, bez trailing mezery. Po změně YAML **restart** služby (config se čte jen při startu).
 
-Dashboard po 401 ukáže anglicky „Authentication required“.
+Dashboard po 401 ukáže přihlašovací formulář (CZ: „Nesprávné uživatelské jméno nebo heslo“). JSON API dál vrací `Authentication required` / `Invalid credentials`.
 
 ---
 
