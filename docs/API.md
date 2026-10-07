@@ -557,7 +557,7 @@ Aplikace **nemá**:
 
 JSON pro Nagios shell plugin a další dohled. **Jazykově neutrální** (nezávislé na `web.locale`). Autoritativní Nagios stav je `overall` / `status` (`OK`/`WARNING`/`CRITICAL`/`UNKNOWN`) z notifikačního enginu. SMTP heslo se neposílá.
 
-Vedle vnořených `sensor` / `system` / `thresholds` / `alarms` endpoint vrací i ploché klíče, aby `check_server_meter.sh` uměl JSON parsovat bez `jq` a bez Pythonu: `temperature_c`, `humidity_percent`, `pressure_hpa`, `gas_resistance_ohm`, `iaq`, `iaq_accuracy`, `static_iaq`, `static_iaq_accuracy`, `eco2_ppm`, `bvoc_ppm`, `cpu_temperature_c`, `cpu_load_percent`, `ram_used_percent`, `uptime_seconds`, `sensor_age_seconds`, `sensor_available` a `*_warning` / `*_critical`.
+Vedle vnořených `sensor` / `system` / `thresholds` / `alarms` endpoint vrací i ploché klíče, aby `check_server_meter.sh` uměl JSON parsovat bez dalších nástrojů: `temperature_c`, `humidity_percent`, `pressure_hpa`, `gas_resistance_ohm`, `iaq`, `iaq_accuracy`, `static_iaq`, `static_iaq_accuracy`, `eco2_ppm`, `bvoc_ppm`, `cpu_temperature_c`, `cpu_load_percent`, `ram_used_percent`, `uptime_seconds`, `sensor_age_seconds`, `sensor_available` a `*_warning` / `*_critical`. Jeden endpoint stačí — plugin si z JSON vybere metriku podle `$ARG1$`.
 
 ### Autentizace
 

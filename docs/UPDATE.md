@@ -163,14 +163,21 @@ journalctl -u server-meter --no-pager -n 40
 Z Nagios serveru:
 
 ```bash
+sudo ./scripts/install_nagios_plugin.sh
+/usr/local/nagios/libexec/check_server_meter.sh temperature
+echo $?
+```
+
+Instalátor aktualizuje plugin (ponechá URL/heslo) i `server-meter.cfg`. Po `nagios -v` provede reload jen při platné konfiguraci.
+
+Legacy:
+
+```bash
 /usr/local/nagios/libexec/check_server_meter.py \
   --url http://RPI_IP:8080/api/nagios/check \
   --user admin \
   --password 'YOUR_PASSWORD'
-echo $?
 ```
-
-Po upgradu **zkopírujte i plugin**, pokud se změnil `scripts/check_server_meter.py`.
 
 ---
 

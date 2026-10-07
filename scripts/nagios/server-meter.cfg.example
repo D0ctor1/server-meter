@@ -1,19 +1,5 @@
-# Minimal Nagios Core 4.4.5 objects for server-meter.
-# Connection URL, username, password and timeouts live INSIDE
-# check_server_meter.sh — there is no extra config file.
+# Example / rendered Nagios objects live in server-meter.cfg in this directory.
+# Copy is not required: scripts/install_nagios_plugin.sh installs that file.
 #
-# Install (on the Nagios host, not on the Raspberry Pi):
-#   sudo ./scripts/install_nagios_plugin.sh
-# Then edit SERVER_METER_URL / SERVER_METER_PASSWORD in the installed script.
-
-define command {
-    command_name    check_server_meter
-    command_line    /usr/lib/nagios/plugins/check_server_meter.sh
-}
-
-define service {
-    use                 generic-service
-    host_name           raspberrypi
-    service_description Server Meter
-    check_command       check_server_meter
-}
+# Plugin connection settings are NOT here. Edit the installed
+# check_server_meter.sh (mode 0700).
