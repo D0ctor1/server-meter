@@ -161,7 +161,7 @@ Basic Auth **bez TLS nešifruje** heslo. Viz [SECURITY.md](SECURITY.md).
 | Klíč | Význam |
 |---|---|
 | `enabled` | pokusit se načíst BSEC |
-| `library_path` | cesta k `libalgobsec.so` (prázdné = výchozí seznam cest) |
+| `library_path` | cesta k `libalgobsec.so` (`install.sh` vyplní `/opt/server-meter/lib/libalgobsec.so`; prázdné = výchozí seznam cest) |
 | `config_blob_path` | volitelný read-only blob z Bosch ZIP |
 | `sample_rate` | `lp` (3 s) nebo `ulp` (300 s) |
 | `temperature_offset` | BSEC `HEATSOURCE` (°C) |

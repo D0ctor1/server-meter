@@ -16,6 +16,7 @@ BME690_CHIP_ID="0x61"
 DETECTED_BUS=""
 DETECTED_ADDR=""
 BSEC_LIB=""
+BSEC_CONFIG=""
 BSEC_OK=0
 
 if [[ "${1:-}" == "--resume" ]]; then
@@ -181,6 +182,10 @@ sync_tree() {
     --exclude '__pycache__' \
     --exclude '.pytest_cache' \
     --exclude 'config/config.yaml' \
+    --exclude 'lib/libalgobsec.so' \
+    --exclude 'lib/libalgobsec.a' \
+    --exclude 'lib/bsec_iaq.config' \
+    --exclude 'lib/*.zip' \
     "${SRC_DIR}/" "${PREFIX}/"
 }
 
@@ -345,8 +350,38 @@ Then run: sudo ./install.sh"
   ok
 }
 
-find_bsec() {
-  step 6 "Installing BME690/BSEC"
+is_aarch64_shared_object() {
+  local path="$1"
+  [[ -f "${path}" ]] || return 1
+  python3 - "${path}" <<'PY'
+import sys
+from pathlib import Path
+data = Path(sys.argv[1]).read_bytes()[:20]
+if data[:4] != b"\x7fELF" or len(data) < 20:
+    raise SystemExit(1)
+# e_machine little-endian uint16 at offset 18; EM_AARCH64 = 183
+raise SystemExit(0 if int.from_bytes(data[18:20], "little") == 183 else 1)
+PY
+}
+
+link_bsec_shared() {
+  local archive="$1"
+  local dest="$2"
+  if [[ "${archive}" == *.so ]]; then
+    cp -a "${archive}" "${dest}"
+    return 0
+  fi
+  if gcc -shared -o "${dest}" \
+      -Wl,--whole-archive "${archive}" -Wl,--no-whole-archive \
+      -lm -lrt -lpthread 2>/run/server-meter/bsec-link.err; then
+    return 0
+  fi
+  gcc -shared -o "${dest}" \
+    -Wl,--whole-archive "${archive}" -Wl,--no-whole-archive \
+    -lm -lrt -lpthread -Wl,-z,notext 2>/run/server-meter/bsec-link.err
+}
+
+install_local_bsec_so() {
   local candidate
   for candidate in \
     "${PREFIX}/lib/libalgobsec.so" \
@@ -356,16 +391,80 @@ find_bsec() {
     "/opt/bosch/bsec/libalgobsec.so" \
     "${SERVER_METER_BSEC_LIB:-}"
   do
-    if [[ -n "${candidate}" && -f "${candidate}" ]]; then
+    if [[ -n "${candidate}" && -f "${candidate}" ]] && is_aarch64_shared_object "${candidate}"; then
       mkdir -p "${PREFIX}/lib"
       if [[ "${candidate}" != "${PREFIX}/lib/libalgobsec.so" ]]; then
         cp -a "${candidate}" "${PREFIX}/lib/libalgobsec.so"
       fi
       BSEC_LIB="${PREFIX}/lib/libalgobsec.so"
-      break
+      if [[ -f "${PREFIX}/lib/bsec_iaq.config" ]]; then
+        BSEC_CONFIG="${PREFIX}/lib/bsec_iaq.config"
+      fi
+      return 0
     fi
   done
-  # Physical driver is in-tree (Bosch SensorAPI v1.1.0 port). No extra pip package.
+  return 1
+}
+
+download_official_bsec() {
+  local work json archive kind config
+  work="/run/server-meter/bsec"
+  json="${work}/result.json"
+  rm -rf "${work}"
+  mkdir -p "${work}" "${PREFIX}/lib"
+  local script="${PREFIX}/scripts/fetch_bsec.py"
+  if [[ ! -f "${script}" ]]; then
+    script="${SRC_DIR}/scripts/fetch_bsec.py"
+  fi
+  if ! python3 "${script}" --work-dir "${work}" --json-out "${json}"; then
+    return 1
+  fi
+  archive="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("archive",""))' "${json}")"
+  kind="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("archive_kind",""))' "${json}")"
+  config="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("config",""))' "${json}")"
+  if [[ -z "${archive}" || ! -f "${archive}" ]]; then
+    return 1
+  fi
+  if [[ "${kind}" == "so" ]]; then
+    cp -a "${archive}" "${PREFIX}/lib/libalgobsec.so"
+  elif ! link_bsec_shared "${archive}" "${PREFIX}/lib/libalgobsec.so"; then
+    return 1
+  fi
+  if ! is_aarch64_shared_object "${PREFIX}/lib/libalgobsec.so"; then
+    rm -f "${PREFIX}/lib/libalgobsec.so"
+    return 1
+  fi
+  chmod 644 "${PREFIX}/lib/libalgobsec.so"
+  chown root:root "${PREFIX}/lib/libalgobsec.so"
+  BSEC_LIB="${PREFIX}/lib/libalgobsec.so"
+  if [[ -n "${config}" && -f "${config}" ]]; then
+    cp -a "${config}" "${PREFIX}/lib/bsec_iaq.config"
+    chmod 644 "${PREFIX}/lib/bsec_iaq.config"
+    chown root:root "${PREFIX}/lib/bsec_iaq.config"
+    BSEC_CONFIG="${PREFIX}/lib/bsec_iaq.config"
+  fi
+  rm -rf "${work}"
+  return 0
+}
+
+find_bsec() {
+  step 6 "Installing BME690/BSEC"
+  mkdir -p "${PREFIX}/lib"
+  if [[ "${SERVER_METER_BSEC_REFRESH:-}" != "1" ]] && install_local_bsec_so; then
+    ok
+    return
+  fi
+  if [[ "${SERVER_METER_SKIP_BSEC:-}" == "1" ]]; then
+    ok
+    return
+  fi
+  # Official Bosch ZIP from software-downloads.html. Proprietary license:
+  # running install.sh downloads it for this machine (not redistributed in git).
+  if download_official_bsec; then
+    ok
+    return
+  fi
+  install_local_bsec_so || true
   ok
 }
 
@@ -379,7 +478,8 @@ write_config() {
     --dest "${CONFIG_FILE}" \
     --bus "${DETECTED_BUS}" \
     --address "${DETECTED_ADDR}" \
-    --bsec-lib "${BSEC_LIB}" >/run/server-meter/write-config.out
+    --bsec-lib "${BSEC_LIB}" \
+    --bsec-config "${BSEC_CONFIG}" >/run/server-meter/write-config.out
   chown "root:${SERVICE_USER}" "${CONFIG_DIR}"
   chmod 0750 "${CONFIG_DIR}"
   chmod 640 "${CONFIG_FILE}"
@@ -602,16 +702,19 @@ EOF
 BLOCKER: Bosch BSEC 3.x library is not present
 ====================================================
 
-Bosch BSEC is proprietary. This installer does not download it
-(no official unattended URL / click-through license).
+Bosch BSEC is proprietary. install.sh tried the official ZIP from
+https://www.bosch-sensortec.com/en/software-tools/software-downloads.html
+but could not install PiFour_Armv8 libalgobsec for this Pi.
 
-IAQ, eCO2 and bVOC stay empty until you add the ARM64 library:
+IAQ, eCO2 and bVOC stay empty until BSEC is present. Retry:
 
-  1. Accept the Bosch Sensortec license and download BSEC 3.2.0.0+
-     (Raspberry Pi 5 / aarch64 / PiFour_Armv8) from Bosch.
-  2. Copy libalgobsec.so to:
-     ${PREFIX}/lib/libalgobsec.so
-  3. Re-run: sudo ./install.sh
+  sudo ./install.sh
+
+or copy an ARM64 libalgobsec.so to:
+  ${PREFIX}/lib/libalgobsec.so
+
+License:
+https://www.bosch-sensortec.com/media/boschsensortec/downloads/software/bme688_development_software/2024_12/20241219_clickthrough_license_terms_bsec_bme680_bme688_bme690.pdf
 
 Temperature, humidity, pressure and gas resistance already work.
 ====================================================

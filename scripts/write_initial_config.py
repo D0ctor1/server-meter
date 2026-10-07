@@ -16,6 +16,7 @@ def main() -> int:
     parser.add_argument("--bus", type=int, required=True)
     parser.add_argument("--address", required=True)
     parser.add_argument("--bsec-lib", default="")
+    parser.add_argument("--bsec-config", default="")
     args = parser.parse_args()
 
     dest = Path(args.dest)
@@ -29,6 +30,8 @@ def main() -> int:
         text, n_bus = re.subn(r"(?m)^(\s*bus:\s*)\d+", rf"\g<1>{args.bus}", text, count=1)
         if args.bsec_lib and 'library_path: ""' in text:
             text = text.replace('library_path: ""', f'library_path: "{args.bsec_lib}"', 1)
+        if args.bsec_config and 'config_blob_path: ""' in text:
+            text = text.replace('config_blob_path: ""', f'config_blob_path: "{args.bsec_config}"', 1)
         dest.write_text(text, encoding="utf-8")
         sys.stdout.write(f"PRESERVE {dest} (I2C bus={args.bus} address={addr} addr_hits={n_addr} bus_hits={n_bus})\n")
         return 0
@@ -39,6 +42,8 @@ def main() -> int:
     text = text.replace("bus: 1", f"bus: {args.bus}", 1)
     if args.bsec_lib:
         text = text.replace('library_path: ""', f'library_path: "{args.bsec_lib}"', 1)
+    if args.bsec_config:
+        text = text.replace('config_blob_path: ""', f'config_blob_path: "{args.bsec_config}"', 1)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(text, encoding="utf-8")
     sys.stdout.write(f"WROTE {dest}\n")

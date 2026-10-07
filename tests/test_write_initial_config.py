@@ -23,11 +23,17 @@ def test_write_then_preserve_password(tmp_path):
             "1",
             "--address",
             "0x76",
+            "--bsec-lib",
+            "/opt/server-meter/lib/libalgobsec.so",
+            "--bsec-config",
+            "/opt/server-meter/lib/bsec_iaq.config",
         ]
     )
     text = dest.read_text(encoding="utf-8")
     assert "address: 0x76" in text
     assert "password: \"CHANGE_ME\"" in text or "password: CHANGE_ME" in text
+    assert 'library_path: "/opt/server-meter/lib/libalgobsec.so"' in text
+    assert 'config_blob_path: "/opt/server-meter/lib/bsec_iaq.config"' in text
     dest.write_text(text.replace("CHANGE_ME", "MySecret9"), encoding="utf-8")
     subprocess.check_call(
         [

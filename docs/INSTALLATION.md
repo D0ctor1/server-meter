@@ -364,6 +364,7 @@ Hlavní vstup je kořenový **`./install.sh`** (wrapper `scripts/install.sh` ho 
 - zkopíruje strom do `/opt/server-meter`
 - vytvoří venv **`/opt/server-meter/venv`** (ne `.venv`)
 - `pip install -r /opt/server-meter/requirements.txt`
+- stáhne oficiální Bosch BSEC 3.2+ ZIP, z `PiFour_Armv8/libalgobsec.a` sestaví `/opt/server-meter/lib/libalgobsec.so` (rsync knihovnu nemaže)
 - pokud chybí `/etc/server-meter/config.yaml`, zkopíruje example (heslo `CHANGE_ME`)
 - `chmod 0750` a `chown root:server-meter` na `/etc/server-meter` (uživatel služby musí adresář projít)
 - `chmod 640` a `chown root:server-meter` na YAML
@@ -419,13 +420,11 @@ groups server-meter
 
 ---
 
-## 9. Bosch BSEC (volitelné, ale nutné pro IAQ)
+## 9. Bosch BSEC (IAQ)
 
-Bez BSEC **web i API běží**, ale `iaq`, `eco2` a `bvoc` budou `null`.
+`install.sh` krok 6 stáhne oficiální Bosch ZIP a nainstaluje ARM64 knihovnu. Bez ní **web i API běží**, ale `iaq`, `eco2` a `bvoc` budou `null`.
 
-Kompletní postup, licence a cesty: **[BME690-BSEC.md](BME690-BSEC.md)**.
-
-Stručně: stáhněte z Bosch BSEC **3.2.0.0+**, architektura **aarch64 / PiFour_Armv8**, soubor `libalgobsec.so` do `/opt/server-meter/lib/libalgobsec.so`.
+Kompletní licence, URL a ruční nouzový postup: **[BME690-BSEC.md](BME690-BSEC.md)**.
 
 ---
 
@@ -779,11 +778,13 @@ sudo usermod -aG i2c server-meter
 
 ### STEP 6 — Install BSEC
 
-Viz [BME690-BSEC.md](BME690-BSEC.md). Cíl:
+Součást `install.sh` (krok 6). Cíl:
 
 ```text
 /opt/server-meter/lib/libalgobsec.so
 ```
+
+Ručně jen když stažení z Bosch selže: [BME690-BSEC.md](BME690-BSEC.md).
 
 ### STEP 7 — Configure server-meter
 

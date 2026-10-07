@@ -176,7 +176,7 @@ Po upgradu **zkopírujte i plugin**, pokud se změnil `scripts/check_server_mete
 
 ## BSEC při upgradu
 
-Nová verze server-meter Bosch ZIP **nestahuje**. Ponechte `libalgobsec.so`. Pokud Bosch vydá novou 3.x knihovnu, postupujte podle [BME690-BSEC.md](BME690-BSEC.md) a licence.
+`install.sh` ponechá existující `/opt/server-meter/lib/libalgobsec.so` (rsync ho nemaže). Chcete-li znovu stáhnout oficiální ZIP z Bosch: `SERVER_METER_BSEC_REFRESH=1 sudo ./install.sh`. Licence: [BME690-BSEC.md](BME690-BSEC.md).
 
 ---
 

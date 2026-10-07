@@ -27,17 +27,23 @@ IAQ, static IAQ, eCO2 (`co2_equivalent`), bVOC (`breath_voc_equivalent`), gas %,
 
 BSEC **není** v git repozitáři a **není** open-source.
 
-Musíte:
+`sudo ./install.sh` stáhne oficiální ZIP z Bosch Sensortec software-downloads (jen `bosch-sensortec.com`, verze **3.2.0.0+**). Spuštěním instalátoru potvrzujete Software License Agreement Bosch Sensortec:
 
-1. Přijmout Software License Agreement Bosch Sensortec.
-2. Stáhnout BSEC **3.2.0.0 nebo novější** (BME690 starší BSEC 2.x nepodporuje).
-3. Oficiální stránka (URL se může změnit — ověřte na webu Bosch):
+https://www.bosch-sensortec.com/media/boschsensortec/downloads/software/bme688_development_software/2024_12/20241219_clickthrough_license_terms_bsec_bme680_bme688_bme690.pdf
 
-   https://www.bosch-sensortec.com/software-tools/software/bme688-and-bme690-software/
+Stránka se seznamem souborů:
 
-Na stránce Bosch v roce 2026 uvádí mimo jiné **BSEC v3.3.0.0**. Použitelná je jakákoli **3.2.0.0+**.
+https://www.bosch-sensortec.com/en/software-tools/software-downloads.html
 
-Tento projekt **neobsahuje** falešné direct-download URL. Stahujte jen z Bosch po odsouhlasení licence.
+Marketingová stránka BME688/BME690 (formulář click-through; stejné ZIP jsou i jako přímé `/media/...` odkazy výše):
+
+https://www.bosch-sensortec.com/software-tools/software/bme688-and-bme690-software/
+
+Ověřeno na **BSEC v3.3.0.1** (srpen 2026): v ZIPu je `release_bin/IAQ/bin/RaspberryPi/PiFour_Armv8/libalgobsec.a` (ne `.so`). Instalátor z něj na Pi 5 udělá shared object a zkopíruje read-only blob `bme690_iaq_33v_3s_28d/bsec_iaq.config` (3,3 V, LP 3 s).
+
+Přeskočit stažení: `SERVER_METER_SKIP_BSEC=1 sudo ./install.sh`.  
+Vynutit znovu: `SERVER_METER_BSEC_REFRESH=1 sudo ./install.sh`.  
+Vlastní ZIP: `SERVER_METER_BSEC_ZIP=/cesta/bsec_v3-3-0-1.zip sudo ./install.sh`.
 
 ---
 
@@ -52,17 +58,15 @@ Tento projekt **neobsahuje** falešné direct-download URL. Stahujte jen z Bosch
 
 **Nepoužívejte** 32bit `armhf` / Pi 3 armv6 knihovnu.
 
-> ⚠️ **VYŽADUJE OVĚŘENÍ:** Přesná cesta uvnitř ZIP (`bsec_v3-3-0-0/.../PiFour_Armv8/libalgobsec.so` vs. jen `libalgobsec.a`) se mezi releasy Bosch **mění**. Po rozbalení hledejte `libalgobsec.so` nebo `libalgobsec.a` v aarch64 složce.
-
-Pokud ZIP obsahuje jen statickou `.a`:
+BSEC 3.3.0.1 dodává **jen** `libalgobsec.a` (ELF AArch64 relocatable). `install.sh` z něj sestaví shared object:
 
 ```bash
-gcc -shared -o libalgobsec.so \
+gcc -shared -o /opt/server-meter/lib/libalgobsec.so \
   -Wl,--whole-archive libalgobsec.a -Wl,--no-whole-archive \
   -lm -lrt -lpthread
 ```
 
-> ⚠️ **VYŽADUJE OVĚŘENÍ:** Přesné linkovací příznaky závisí na tom, jestli je `.a` PIC. Pokud linker selže, postupujte podle README v Bosch ZIP, ne podle vymyšlených flagů.
+Při chybě linkeru zkusí ještě `-Wl,-z,notext`. Nepoužívejte 32bit `PiThree_ArmV6` ani `Sel_IAQ`.
 
 ---
 
@@ -80,7 +84,7 @@ $SERVER_METER_BSEC_LIB            # env
 libalgobsec.so                    # dynamický linker
 ```
 
-Doporučený postup po `install.sh`:
+`install.sh` umisťuje knihovnu sám. Ruční kopie jen když stažení z Bosch selže:
 
 ```bash
 sudo mkdir -p /opt/server-meter/lib

@@ -32,9 +32,10 @@ server_meter/sensor/bme690.py are derived from:
   https://github.com/boschsensortec/BME690_SensorAPI
 
 Bosch Sensortec BSEC (Bosch Software Environmental Cluster) is proprietary
-software. It is NOT redistributed with this project. Operators must download
-it from Bosch Sensortec after accepting the Bosch license. See README.md
-and docs/bme690-bsec.md.
+software. It is NOT redistributed in this git repository. `install.sh`
+downloads the official ZIP from bosch-sensortec.com onto the target Pi.
+Running the installer accepts the Bosch Sensortec Software License
+Agreement. See README.md and docs/BME690-BSEC.md.
 
 Chart.js is licensed under the MIT License.
 https://github.com/chartjs/Chart.js

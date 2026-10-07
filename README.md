@@ -88,11 +88,9 @@ sudo ./uninstall.sh
 
 ## Bosch BSEC (IAQ)
 
-BSEC is proprietary. The installer **does not download** it.
+BSEC is proprietary Bosch software. `sudo ./install.sh` downloads the official 3.2+ ZIP from bosch-sensortec.com, extracts `PiFour_Armv8/libalgobsec.a`, and links `/opt/server-meter/lib/libalgobsec.so` on this Pi. That is not a git-redistributed binary; running the installer accepts the Bosch license.
 
-Without `libalgobsec.so`, temperature / humidity / pressure / gas still work; IAQ, eCO2 and bVOC stay empty.
-
-To enable IAQ: accept the Bosch license, copy the ARM64 `libalgobsec.so` to `/opt/server-meter/lib/libalgobsec.so`, then `sudo ./install.sh` again.
+Without the library, temperature / humidity / pressure / gas still work; IAQ, eCO2 and bVOC stay empty.
 
 ## More documentation
 
