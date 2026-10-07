@@ -28,6 +28,9 @@
     <div id="password-banner" class="banner" hidden data-i18n-html="banner.default_password_html">
       Je aktivní výchozí heslo. Změňte je v Nastavení → Uživatelé.
     </div>
+    <div id="ram-banner" class="banner" hidden data-i18n="health.ram_protection_active">
+      WARNING — RAM protection active – oldest history samples are being removed.
+    </div>
 
     <header class="top">
       <div>
@@ -64,6 +67,19 @@
       </article>
     </section>
 
+    <section class="health-section">
+      <div class="section-head">
+        <h2 class="section-title" id="system-health-title" data-i18n="dashboard.system_health">SYSTEM HEALTH</h2>
+        <span id="system-health-overall" class="health-overall">—</span>
+      </div>
+      <div class="health-grid" id="health-grid"></div>
+    </section>
+
+    <section id="alerts-section">
+      <h2 class="section-title" data-i18n="dashboard.active_alerts">Aktivní alarmy</h2>
+      <div id="active-alerts" class="alerts"></div>
+    </section>
+
     <section>
       <h2 class="section-title" data-i18n="dashboard.current_values">Aktuální hodnoty</h2>
       <p id="values-error" class="hint values-error" hidden></p>
@@ -80,11 +96,30 @@
             <option value="3600" selected data-i18n="history.window_1h">1 hodina</option>
             <option value="21600" data-i18n="history.window_6h">6 hodin</option>
             <option value="86400" data-i18n="history.window_24h">24 hodin</option>
+            <option value="all" data-i18n="history.window_all">Vše</option>
           </select>
         </label>
       </div>
       <p class="hint" data-i18n="dashboard.history_hint">Grafy jsou po každém restartu prázdné. Vzorky se na SD kartu nikdy nezapisují.</p>
+      <p id="history-empty" class="hint" hidden data-i18n="history.empty">Žádná historická data.</p>
       <div class="charts" id="charts"></div>
+    </section>
+
+    <section>
+      <h2 class="section-title" data-i18n="dashboard.alarm_history">Historie alarmů</h2>
+      <div class="threshold-wrap">
+        <table class="threshold-table" id="alarm-history-table">
+          <thead>
+            <tr>
+              <th data-i18n="alarms.col.time">Čas</th>
+              <th data-i18n="alarms.col.kind">Stav</th>
+              <th data-i18n="alarms.col.metric">Metrika</th>
+              <th data-i18n="alarms.col.value">Hodnota</th>
+            </tr>
+          </thead>
+          <tbody id="alarm-history-body"></tbody>
+        </table>
+      </div>
     </section>
 
     <footer>
@@ -225,6 +260,18 @@
       <section class="settings-section settings-tab" data-tab-panel="system" hidden>
         <h2 data-i18n="settings.tab.system">Systém</h2>
         <p id="settings-system-info" class="hint"></p>
+        <dl id="settings-system-dl" class="diag-list"></dl>
+        <h2 data-i18n="settings.diagnostics">Diagnostika</h2>
+        <dl id="settings-diag-dl" class="diag-list"></dl>
+        <h2 data-i18n="settings.token">Nagios monitoring token</h2>
+        <p class="hint" data-i18n="settings.token_hint">Volitelný token jen pro GET /api/monitoring. Stávající Basic Auth Nagios plugin zůstává.</p>
+        <p id="settings-token-status" class="meta"></p>
+        <p id="settings-token-once" class="hint" hidden></p>
+        <div class="settings-actions">
+          <button type="button" id="settings-token-generate" class="secondary-btn" data-i18n="settings.token_generate">Vygenerovat token</button>
+          <button type="button" id="settings-token-revoke" class="danger-btn" data-i18n="settings.token_revoke">Zrušit token</button>
+          <button type="button" id="settings-export" class="secondary-btn" data-i18n="settings.export">Exportovat konfiguraci</button>
+        </div>
       </section>
     </div>
   </div>

@@ -58,7 +58,7 @@ Middleware `SecurityHeadersMiddleware` přidává mimo jiné:
 | `X-Frame-Options` | `DENY` |
 | `Referrer-Policy` | `no-referrer` |
 | `Cache-Control` | `no-store` |
-| `X-server-meter` | verze projektu (`1.0.0`) |
+| `X-server-meter` | verze projektu |
 
 Požadavek větší než `web.max_request_bytes` (výchozí 16384) → HTTP **413** `{"error":"request too large"}`.
 
@@ -90,8 +90,10 @@ curl http://192.168.1.50:8080/api/health
 - `Content-Type: application/json`
 
 ```json
-{"status":"ok","service":"server-meter"}
+{"status":"healthy","service":"server-meter"}
 ```
+
+Liveness only. Monitoring values belong on `GET /api/monitoring`.
 
 Pokud `web.health_public: false`:
 
@@ -281,7 +283,7 @@ Po `systemctl restart server-meter` je `count` **0** (nebo jen vzorky od nového
 
 ## GET /api/status
 
-Souhrn aplikace, senzoru, RAM bufferu a Raspberry Pi. **Neobsahuje** heslo.
+Souhrn aplikace, senzoru, RAM bufferu, SYSTEM HEALTH a Raspberry Pi. **Neobsahuje** heslo. Pole `system_health` je jazykově neutrální (`ok` / `warning` / `critical` / `off`). Historie v `history` zahrnuje `memory_bytes` a stáří nejstaršího/nejnovějšího vzorku.
 
 ### Autentizace
 
@@ -545,7 +547,6 @@ V `config/config.mock.yaml` (`environment: development`, `api_docs_enabled: true
 Aplikace **nemá**:
 
 - `POST` / `PUT` / `DELETE` měření (historie je RAM-only)
-- `/api/export`
 - `/api/history/download`
 - websocket
 - GraphQL
@@ -564,7 +565,9 @@ Vedle vnořených `sensor` / `system` / `thresholds` / `alarms` endpoint vrací 
 
 ### Autentizace
 
-HTTP Basic Auth. Veřejný endpoint kvůli Nagiosu **neexistuje**.
+HTTP Basic Auth. Volitelný read-only monitoring token (`Authorization: Bearer …` nebo `X-Monitoring-Token`) čte **jen** `GET /api/monitoring`. Admin ho vydá v Nastavení → Systém. Token **nenahrazuje** stávající Basic Auth plugin.
+
+Admin export konfigurace: `GET /api/admin/export` (hesla, SMTP heslo a tokeny = `REDACTED`). Systémové informace: `GET /api/admin/system`. Historie alarmů (ne sensor history): `GET /api/alarms/history`.
 
 ### Proveď
 

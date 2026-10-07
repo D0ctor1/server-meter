@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 
 from server_meter.api.nagios import NagiosState, evaluate_nagios
 from server_meter.api.settings import monitoring_payload
+from server_meter.health import assemble_system_health, liveness_payload
 from server_meter.models.measurement import iaq_accuracy_label
 from server_meter.service import MeterService
 from server_meter.users import AuthUser
@@ -22,9 +23,9 @@ def build_router(auth_dep) -> APIRouter:
 
     @router.get("/api/health")
     async def health(request: Request) -> dict[str, str]:
-        # Liveness only. No history scan, no sensor I/O.
+        # Liveness only. No history scan, no sensor I/O, no monitoring payload.
         _ = request.app.state.service
-        return {"status": "ok", "service": "server-meter"}
+        return liveness_payload()
 
     @router.get("/api/status")
     async def status(request: Request, user: AuthUser = Depends(auth_dep)) -> dict[str, Any]:
@@ -66,6 +67,8 @@ def build_router(auth_dep) -> APIRouter:
                 "ram_usage_percent": sysm.ram_usage_percent,
             },
             "last_measurement_timestamp": current.timestamp if current else None,
+            "system_health": assemble_system_health(service, config),
+            "alarms": service.notifier.snapshot_alarms(),
         }
 
     @router.get("/api/current")

@@ -6,6 +6,7 @@ import socket
 import stat
 import subprocess
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -65,12 +66,22 @@ class _Handler(BaseHTTPRequestHandler):
     require_auth = True
     expected_auth = "Basic YWRtaW46c2VjcmV0"
     raw_body: bytes | None = None
+    http_status = 200
+    delay_s = 0.0
 
     def do_GET(self) -> None:  # noqa: N802
+        if self.delay_s:
+            time.sleep(self.delay_s)
         if self.require_auth and self.headers.get("Authorization") != self.expected_auth:
             self.send_response(401)
             self.send_header("WWW-Authenticate", 'Basic realm="server-meter"')
             self.end_headers()
+            return
+        if self.http_status != 200:
+            self.send_response(self.http_status)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"error")
             return
         if self.path.split("?", 1)[0] != "/api/monitoring":
             self.send_response(404)
@@ -87,13 +98,23 @@ class _Handler(BaseHTTPRequestHandler):
         return
 
 
-def _serve(payload: dict | None = None, raw_body: bytes | None = None) -> tuple[HTTPServer, threading.Thread, int]:
+def _serve(
+    payload: dict | None = None,
+    raw_body: bytes | None = None,
+    *,
+    http_status: int = 200,
+    delay_s: float = 0.0,
+    require_auth: bool = True,
+) -> tuple[HTTPServer, threading.Thread, int]:
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     port = sock.getsockname()[1]
     sock.close()
     _Handler.payload = payload if payload is not None else _payload("OK")
     _Handler.raw_body = raw_body
+    _Handler.http_status = http_status
+    _Handler.delay_s = delay_s
+    _Handler.require_auth = require_auth
     server = HTTPServer(("127.0.0.1", port), _Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -114,14 +135,38 @@ def _run(script: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["sh", str(script), *args], check=False, capture_output=True, text=True)
 
 
-def _check(tmp_path: Path, payload: dict | None = None, *args: str, raw_body: bytes | None = None) -> subprocess.CompletedProcess[str]:
-    server, _thread, port = _serve(payload, raw_body=raw_body)
+def _check(
+    tmp_path: Path,
+    payload: dict | None = None,
+    *args: str,
+    raw_body: bytes | None = None,
+    http_status: int = 200,
+    delay_s: float = 0.0,
+    require_auth: bool = True,
+    password: str = "secret",
+    timeout_s: int | None = None,
+) -> subprocess.CompletedProcess[str]:
+    server, _thread, port = _serve(
+        payload,
+        raw_body=raw_body,
+        http_status=http_status,
+        delay_s=delay_s,
+        require_auth=require_auth,
+    )
     try:
-        script = _prepared_plugin(tmp_path, f"http://127.0.0.1:{port}")
+        script = _prepared_plugin(tmp_path, f"http://127.0.0.1:{port}", password=password)
+        if timeout_s is not None:
+            text = script.read_text(encoding="utf-8")
+            text = text.replace("CONNECT_TIMEOUT=5", f"CONNECT_TIMEOUT={timeout_s}")
+            text = text.replace("REQUEST_TIMEOUT=10", f"REQUEST_TIMEOUT={timeout_s}")
+            script.write_text(text, encoding="utf-8")
         return _run(script, *args)
     finally:
         server.shutdown()
         _Handler.raw_body = None
+        _Handler.http_status = 200
+        _Handler.delay_s = 0.0
+        _Handler.require_auth = True
 
 
 def test_plugin_ok_warning_critical_unknown_and_perfdata(tmp_path):
@@ -377,6 +422,75 @@ def test_installer_writes_objects_once(tmp_path):
     plugin = plugin_dir / "check_server_meter.sh"
     assert plugin.exists()
     assert plugin.stat().st_mode & 0o777 == 0o700
+
+
+def test_plugin_http_401_403_500_and_timeout(tmp_path):
+    unauthorized = _check(tmp_path, password="wrong-pass")
+    assert unauthorized.returncode == 2
+    assert "HTTP 401" in unauthorized.stdout
+    assert "wrong-pass" not in unauthorized.stdout
+    assert "wrong-pass" not in unauthorized.stderr
+
+    forbidden = _check(tmp_path, http_status=403)
+    assert forbidden.returncode == 2
+    assert "HTTP 403" in forbidden.stdout
+
+    error = _check(tmp_path, http_status=500)
+    assert error.returncode == 2
+    assert "HTTP 500" in error.stdout
+
+    timed = _check(tmp_path, delay_s=3.0, timeout_s=1)
+    assert timed.returncode == 2
+    assert "timeout" in timed.stdout.lower() or "unreachable" in timed.stdout
+
+
+def test_plugin_metrics_ok_or_unknown(tmp_path):
+    payload = _payload()
+    expected = {
+        "humidity": 0,
+        "pressure": 0,
+        "gas_resistance": 0,
+        "eco2": 0,
+        "bvoc": 0,
+        "cpu_load": 0,
+        "static_iaq": 0,
+    }
+    for metric, code in expected.items():
+        result = _check(tmp_path, payload, metric)
+        assert result.returncode == code, f"{metric}: {result.stdout}"
+        assert "|" in result.stdout
+
+
+def test_installer_creates_backup(tmp_path):
+    nagios_etc = tmp_path / "nagios" / "etc"
+    objects = nagios_etc / "objects"
+    objects.mkdir(parents=True)
+    nagios_cfg = nagios_etc / "nagios.cfg"
+    nagios_cfg.write_text("log_file=/var/log/nagios.log\n", encoding="utf-8")
+    plugin_dir = tmp_path / "libexec"
+    plugin_dir.mkdir()
+    dest = plugin_dir / "check_server_meter.sh"
+    dest.write_text(PLUGIN.read_text(encoding="utf-8"), encoding="utf-8")
+    fake_bin = tmp_path / "nagios-bin"
+    fake_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    fake_bin.chmod(0o755)
+    env = os.environ.copy()
+    env.update(
+        {
+            "SKIP_ROOT_CHECK": "1",
+            "PLUGIN_DIR": str(plugin_dir),
+            "NAGIOS_OBJECTS_DIR": str(objects),
+            "NAGIOS_CFG": str(nagios_cfg),
+            "NAGIOS_BIN": str(fake_bin),
+            "NAGIOS_RELOAD": "0",
+            "INCLUDE_HOST": "1",
+        }
+    )
+    result = subprocess.run(["bash", str(INSTALLER)], check=False, capture_output=True, text=True, env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    backups = list(plugin_dir.glob("check_server_meter.sh.bak.*")) + list(nagios_etc.glob("nagios.cfg.bak.*"))
+    assert backups, result.stdout
+    assert "Graphing backend" in result.stdout
 
 
 def test_plugin_mode_in_repo_is_executable():

@@ -382,6 +382,108 @@
         samples: status.history ? status.history.samples : 0,
         sensor: status.sensor ? status.sensor.status : "—",
       });
+      await fillSystemDetails();
+    } catch (err) {
+      setStatus(err.message, "state-crit");
+    }
+  }
+
+  function fillDl(id, rows) {
+    const root = $(id);
+    if (!root) return;
+    root.innerHTML = "";
+    for (const [label, value] of rows) {
+      const dt = document.createElement("dt");
+      dt.textContent = label;
+      const dd = document.createElement("dd");
+      dd.textContent = value == null || value === "" ? "—" : String(value);
+      root.append(dt, dd);
+    }
+  }
+
+  async function fillSystemDetails() {
+    try {
+      const [info, token, status, current] = await Promise.all([
+        requestJson("/api/admin/system", { method: "GET" }),
+        requestJson("/api/admin/monitoring-token", { method: "GET" }),
+        requestJson("/api/status", { method: "GET" }),
+        requestJson("/api/current", { method: "GET" }),
+      ]);
+      fillDl("settings-system-dl", [
+        [t("diag.app_version"), info.application_version],
+        [t("diag.python"), info.python_version],
+        [t("diag.os"), info.os],
+        [t("diag.kernel"), info.kernel],
+        [t("diag.uptime"), i18n.formatDuration(info.uptime_seconds)],
+        [t("diag.cpu"), info.cpu_usage_percent == null ? "—" : `${Number(info.cpu_usage_percent).toFixed(0)} %`],
+        [t("diag.cpu_temp"), info.cpu_temperature_c == null ? "—" : `${Number(info.cpu_temperature_c).toFixed(1)} °C`],
+        [t("diag.ram"), info.ram_usage_percent == null ? "—" : `${Number(info.ram_usage_percent).toFixed(0)} %`],
+      ]);
+      const i2c = status.system_health && status.system_health.items && status.system_health.items.i2c
+        ? status.system_health.items.i2c
+        : {};
+      const bsec = status.system_health && status.system_health.items && status.system_health.items.bsec
+        ? status.system_health.items.bsec
+        : {};
+      fillDl("settings-diag-dl", [
+        [t("diag.i2c_bus"), info.i2c_bus || i2c.bus],
+        [t("diag.address"), info.bme690_address || i2c.address],
+        [t("diag.i2c_status"), i2c.status || "—"],
+        [t("diag.bsec_version"), info.bsec_version || "—"],
+        [t("diag.bsec_status"), bsec.status || "—"],
+        [t("diag.iaq_accuracy"), current && current.iaq_accuracy != null ? String(current.iaq_accuracy) : "—"],
+        [t("diag.static_iaq_accuracy"), current && current.static_iaq_accuracy != null ? String(current.static_iaq_accuracy) : "—"],
+      ]);
+      const tokenStatus = $("settings-token-status");
+      if (tokenStatus) {
+        tokenStatus.textContent = token.configured ? t("settings.token_configured") : t("settings.token_none");
+      }
+    } catch (err) {
+      setStatus(err.message, "state-crit");
+    }
+  }
+
+  async function onExport() {
+    try {
+      const payload = await requestJson("/api/admin/export", { method: "GET" });
+      const blob = JSON.stringify(payload, null, 2);
+      const url = URL.createObjectURL(new Blob([blob], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "server-meter-config.json";
+      link.click();
+      URL.revokeObjectURL(url);
+      setStatus(t("settings.export_ok"), "state-ok");
+    } catch (err) {
+      setStatus(err.message, "state-crit");
+    }
+  }
+
+  async function onTokenGenerate() {
+    try {
+      const payload = await requestJson("/api/admin/monitoring-token", { method: "POST" });
+      const once = $("settings-token-once");
+      if (once) {
+        once.hidden = false;
+        once.textContent = t("settings.token_once", { token: payload.token });
+      }
+      await fillSystemDetails();
+      setStatus(t("settings.token_generated"), "state-ok");
+    } catch (err) {
+      setStatus(err.message, "state-crit");
+    }
+  }
+
+  async function onTokenRevoke() {
+    try {
+      await requestJson("/api/admin/monitoring-token", { method: "DELETE" });
+      const once = $("settings-token-once");
+      if (once) {
+        once.hidden = true;
+        once.textContent = "";
+      }
+      await fillSystemDetails();
+      setStatus(t("settings.token_revoked"), "state-ok");
     } catch (err) {
       setStatus(err.message, "state-crit");
     }
@@ -430,6 +532,9 @@
     $("settings-close").addEventListener("click", closeSettings);
     $("settings-form").addEventListener("submit", onSave);
     $("settings-test").addEventListener("click", onTest);
+    if ($("settings-export")) $("settings-export").addEventListener("click", onExport);
+    if ($("settings-token-generate")) $("settings-token-generate").addEventListener("click", onTokenGenerate);
+    if ($("settings-token-revoke")) $("settings-token-revoke").addEventListener("click", onTokenRevoke);
     $("settings-overlay").addEventListener("click", (event) => {
       if (event.target === $("settings-overlay")) closeSettings();
     });

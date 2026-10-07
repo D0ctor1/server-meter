@@ -114,12 +114,101 @@ host_already_defined() {
     | grep -q .
 }
 
+backup_file() {
+  local src="$1"
+  [[ -f "$src" ]] || return 0
+  local bak="${src}.bak.$(date +%Y%m%d%H%M%S)"
+  cp -a "$src" "$bak"
+  echo "Backup: $bak"
+}
+
+object_defined_elsewhere() {
+  local search_root="$1"
+  local our_file="$2"
+  local pattern="$3"
+  [[ -n "$search_root" && -d "$search_root" ]] || return 1
+  grep -R --include='*.cfg' -E "$pattern" "$search_root" 2>/dev/null \
+    | grep -v ":${our_file}:" \
+    | grep -v "/${our_file##*/}:" \
+    | grep -q .
+}
+
+detect_graphing_backend() {
+  local found=""
+  if [[ -d /usr/local/pnp4nagios ]] || [[ -d /usr/local/nagios/share/pnp ]] || command -v npcd >/dev/null 2>&1; then
+    found="PNP4Nagios"
+  elif [[ -d /usr/local/nagiosgraph ]] || [[ -d /usr/local/nagios/share/nagiosgraph ]]; then
+    found="Nagiosgraph"
+  fi
+  if [[ -n "$NAGIOS_CFG" && -f "$NAGIOS_CFG" ]]; then
+    if grep -Eq '^[[:space:]]*process_performance_data[[:space:]]*=[[:space:]]*1' "$NAGIOS_CFG"; then
+      if [[ -n "$found" ]]; then
+        echo "Graphing backend: ${found} (process_performance_data=1). Not installing another stack."
+      else
+        echo "Graphing backend: process_performance_data=1 is enabled. Existing backend will receive perfdata."
+      fi
+      return 0
+    fi
+  fi
+  if [[ -n "$found" ]]; then
+    echo "Graphing backend: ${found} detected. Not installing another stack."
+    return 0
+  fi
+  echo "Graphing backend: none detected. Nagios still works; historical graphs need PNP4Nagios or Nagiosgraph."
+}
+
+service_description_of() {
+  awk '
+    $1=="service_description" {
+      desc=$0
+      sub(/^[[:space:]]*service_description[[:space:]]+/, "", desc)
+      sub(/[[:space:]]*;.*$/, "", desc)
+      sub(/[[:space:]]+$/, "", desc)
+      print desc
+    }
+  ' "$1"
+}
+
+preserve_unknown_services() {
+  local existing="$1"
+  local rendered="$2"
+  [[ -f "$existing" ]] || return 0
+  awk '
+    function desc_of() {
+      line=$0
+      sub(/^[[:space:]]*service_description[[:space:]]+/, "", line)
+      sub(/[[:space:]]*;.*$/, "", line)
+      sub(/[[:space:]]+$/, "", line)
+      return line
+    }
+    FNR==NR {
+      if ($1=="service_description") known[desc_of()]=1
+      next
+    }
+    /define service/ {buf=$0 ORS; inblk=1; desc=""; next}
+    inblk {
+      buf=buf $0 ORS
+      if ($1=="service_description") desc=desc_of()
+      if ($0 ~ /^[[:space:]]*}[[:space:]]*$/) {
+        if (desc!="" && !(desc in known)) printf "%s", buf
+        inblk=0
+        buf=""
+      }
+      next
+    }
+  ' "$rendered" "$existing" >> "$rendered"
+}
+
 detect_plugin_dir
 DEST="${PLUGIN_DIR}/${PLUGIN_NAME}"
 mkdir -p "$PLUGIN_DIR"
 
 staging="$(mktemp)"
 trap 'rm -f "$staging"' EXIT
+
+if [[ -f "$DEST" ]]; then
+  backup_file "$DEST"
+fi
 
 if [[ -f "$DEST" ]] && grep -q '^# === server-meter plugin configuration ===' "$DEST"; then
   {
@@ -165,12 +254,19 @@ if [[ "$INSTALL_OBJECTS" == "1" ]]; then
   else
     mkdir -p "$NAGIOS_OBJECTS_DIR"
     OBJECT_DEST="${NAGIOS_OBJECTS_DIR}/server-meter.cfg"
+    search_root="$(dirname "$NAGIOS_OBJECTS_DIR")"
+    detect_graphing_backend
+    if [[ -f "$OBJECT_DEST" ]]; then
+      backup_file "$OBJECT_DEST"
+    fi
+    if [[ -n "$NAGIOS_CFG" && -f "$NAGIOS_CFG" ]]; then
+      backup_file "$NAGIOS_CFG"
+    fi
     include_host="$INCLUDE_HOST"
     if [[ "$include_host" == "auto" ]]; then
-      search_root="$(dirname "$NAGIOS_OBJECTS_DIR")"
       if host_already_defined "$search_root" "$OBJECT_DEST"; then
         include_host="0"
-        echo "Existing host ${NAGIOS_HOST_NAME} found; not duplicating define host."
+        echo "WARNING: existing Nagios object detected (host ${NAGIOS_HOST_NAME}); not duplicating define host."
       else
         include_host="1"
       fi
@@ -192,9 +288,22 @@ if [[ "$INSTALL_OBJECTS" == "1" ]]; then
     else
       sed -i '/# __BEGIN_HOST__/d;/# __END_HOST__/d' "$rendered"
     fi
+    if object_defined_elsewhere "$search_root" "$OBJECT_DEST" '^[[:space:]]*command_name[[:space:]]+check_server_meter([[:space:]]|;|$)'; then
+      echo "WARNING: existing Nagios object detected (command check_server_meter); not duplicating define command."
+      awk '
+        /define command/ {skip=1; next}
+        skip && /^}/ {skip=0; next}
+        skip {next}
+        {print}
+      ' "$rendered" > "${rendered}.cmd"
+      mv "${rendered}.cmd" "$rendered"
+    fi
+    if [[ -f "$OBJECT_DEST" ]]; then
+      preserve_unknown_services "$OBJECT_DEST" "$rendered"
+    fi
     install -m 0644 "$rendered" "$OBJECT_DEST"
     rm -f "$rendered"
-    echo "Installed Nagios objects: ${OBJECT_DEST}"
+    echo "Installed Nagios objects: ${OBJECT_DEST} (backup kept if a previous file existed)"
 
     if [[ -n "$NAGIOS_CFG" && -f "$NAGIOS_CFG" ]]; then
       already=0
@@ -231,9 +340,10 @@ validate_and_reload() {
   rc=$?
   set -e
   if [[ "$rc" -ne 0 ]]; then
-    echo "Nagios configuration is invalid. Reload was NOT performed." >&2
+    echo "Nagios configuration is invalid. Reload was NOT performed. Previous configuration remains in .bak.* files." >&2
     return "$rc"
   fi
+  echo "Nagios validation succeeded (Total Errors: 0 expected)."
   if [[ "$NAGIOS_RELOAD" != "1" && "$NAGIOS_RELOAD" != "true" ]]; then
     echo "Validation succeeded. Reload skipped (NAGIOS_RELOAD=${NAGIOS_RELOAD})."
     return 0
@@ -281,6 +391,8 @@ Nagios command:
       command_line  ${DEST} \$ARG1\$
   }
 
-This installer does not install Python. It updates this plugin and the
-server-meter.cfg object file only (adds cfg_file= to nagios.cfg when missing).
+This installer does not install Python and does not install PNP4Nagios.
+It updates this plugin and the server-meter.cfg object file only
+(adds cfg_file= to nagios.cfg when missing, never blindly overwrites
+unrelated Nagios objects). On validation failure it does not reload.
 EOF

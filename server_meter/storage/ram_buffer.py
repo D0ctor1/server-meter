@@ -131,16 +131,25 @@ class RamBuffer:
         return result
 
     def stats(self) -> dict[str, int | float | None]:
+        now = time.time()
+        # Approximate RAM cost of one Measurement (slots + Python object overhead).
+        bytes_per_sample = 480
         with self._lock:
+            count = len(self._data)
+            oldest = self._data[0].timestamp if self._data else None
+            newest = self._data[-1].timestamp if self._data else None
             return {
-                "samples": len(self._data),
+                "samples": count,
                 "max_samples": self._max_samples,
                 "hard_max_samples": self._hard_max,
                 "max_age_seconds": self._max_age_seconds,
                 "dropped_oldest": self._dropped_oldest,
                 "trim_events": self._trim_events,
-                "oldest_timestamp": self._data[0].timestamp if self._data else None,
-                "newest_timestamp": self._data[-1].timestamp if self._data else None,
+                "oldest_timestamp": oldest,
+                "newest_timestamp": newest,
+                "oldest_age_seconds": None if oldest is None else max(0.0, now - oldest),
+                "newest_age_seconds": None if newest is None else max(0.0, now - newest),
+                "memory_bytes": count * bytes_per_sample,
             }
 
     def _trim_oldest_locked(self, count: int) -> int:

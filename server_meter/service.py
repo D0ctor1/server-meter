@@ -160,11 +160,15 @@ class MeterService:
         self.stats.consecutive_errors = 0
         self.stats.last_success_at = sample.timestamp
         self.sensor_status = SensorStatus.OK
+        sysm = self.system.snapshot()
+        sample.cpu_temperature = sysm.cpu_temperature_c
+        sample.cpu_load = sysm.cpu_usage_percent
+        sample.ram_usage = sysm.ram_usage_percent
         self.current = sample
         self.buffer.append(sample)
         self.buffer.enforce_limits(now=sample.timestamp)
         self.memory.maybe_protect()
-        self.notifier.observe(sample, self.system.snapshot(), self.sensor_status, self.sensor_age_seconds())
+        self.notifier.observe(sample, sysm, self.sensor_status, self.sensor_age_seconds())
 
     def _on_sensor_error(self, exc: SensorError) -> None:
         self.stats.measurement_errors += 1

@@ -25,7 +25,7 @@ delete oldest samples
 SD CARD
 ```
 
-Test v CI: `tests/test_disk_policy.py` (`sqlite3` jen pro účty v `users.py`, žádný `FileHandler`, žádné volání `bsec_get_state(`).
+Test v CI: `tests/test_disk_policy.py` (`sqlite3` jen pro účty, historii alarmů a monitoring token v `users.py` / `sqlite_state.py`, žádný `FileHandler`, žádné volání `bsec_get_state(`). Sensorové vzorky v SQLite nejsou.
 
 ---
 
@@ -40,7 +40,7 @@ Statické, spravované operátorem. Aplikace to za běhu **nepřepisuje**:
 | Statický frontend | `/opt/server-meter/web/` |
 | Python venv | `/opt/server-meter/venv/` |
 | YAML konfigurace (včetně SMTP) | `/etc/server-meter/config.yaml` |
-| SQLite uživatelské účty | `/var/lib/server-meter/users.db` (ne historie měření) |
+| SQLite uživatelské účty, historie alarmů, monitoring token | `/var/lib/server-meter/users.db` (ne historie měření) |
 | systemd unit | `/etc/systemd/system/server-meter.service` |
 | BSEC `.so` (volitelně) | `/opt/server-meter/lib/libalgobsec.so` |
 | Dokumentace | `/opt/server-meter/docs/` |
@@ -59,7 +59,7 @@ Zápis na SD probíhá při **instalaci / upgradu / uložení Settings (SMTP/pra
 | statistiky smyčky | `RuntimeStats` | vynulované |
 | memory pressure | `MemoryProtector` | vynulované |
 | CPU usage delta | `SystemMonitor._prev_cpu` | vynulované |
-| stav alarmu / e-mailová fronta | `NotificationEngine` | vynulované |
+| stav alarmu / e-mailová fronta | `NotificationEngine` | vynulované (historie alarmů je v SQLite, bez hesel) |
 
 BSEC `persist_state: true` konfigurace **odmítne** (`ConfigError`). Wrapper **nevolá** `bsec_get_state`.
 

@@ -140,7 +140,7 @@ enabled
 active
 ```
 
-a health JSON `{"status":"ok","service":"server-meter"}`.
+a health JSON `{"status":"healthy","service":"server-meter"}`.
 
 Historie:
 
@@ -240,7 +240,7 @@ Nevytvářejte runtime soubory v `/opt/server-meter`. Pokud byste unit upravili 
 
 ## Restart loop
 
-`StartLimitIntervalSec=60`, `StartLimitBurst=5`, `Restart=always`.
+`StartLimitIntervalSec=120`, `StartLimitBurst=10`, `Restart=on-failure`, `RestartSec=3`.
 
 Když YAML obsahuje prázdné nebo příliš krátké heslo, proces končí kódem **2**. Stejný kód 2 dává i `Configuration file not found`, když `/etc/server-meter` není 0750 `root:server-meter` (uživatel služby adresář neprojde, i když YAML existuje). Systemd ho restartuje, až narazí na limit → `failed`. Tovární `CHANGE_ME` (9 znaků) start **povolí**.
 

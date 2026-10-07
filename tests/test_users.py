@@ -49,6 +49,9 @@ def test_user_cannot_call_admin_endpoints(tmp_path):
         )
         auth = ("jan", "userpass1")
         assert client.get("/api/admin/users", auth=auth).status_code == 403
+        assert client.get("/api/admin/export", auth=auth).status_code == 403
+        assert client.get("/api/admin/system", auth=auth).status_code == 403
+        assert client.post("/api/admin/monitoring-token", auth=auth).status_code == 403
         assert client.get("/api/settings", auth=auth).status_code == 403
         assert client.put("/api/settings", auth=auth, json={"enabled": True}).status_code == 403
         assert client.post("/api/settings/test-email", auth=auth).status_code == 403

@@ -74,6 +74,12 @@ def test_cz_and_en_dictionaries_have_the_same_keys():
         "users.add",
         "users.last_admin",
         "settings.tab.users",
+        "dashboard.system_health",
+        "health.ram_protection_active",
+        "history.window_all",
+        "history.empty",
+        "settings.export",
+        "settings.token",
     ):
         assert required in cz
 

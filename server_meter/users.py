@@ -16,6 +16,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHash, VerificationError, VerifyMismatchError
 
 from server_meter.config import DEFAULT_PASSWORD_PLACEHOLDER, AppConfig
+from server_meter.sqlite_state import AlarmHistory, MonitoringTokens
 
 logger = logging.getLogger("server_meter.users")
 
@@ -179,6 +180,8 @@ class UserStore:
         self._conn.execute("PRAGMA foreign_keys = ON")
         if path != ":memory:" and not test:
             self._conn.execute("PRAGMA journal_mode = WAL")
+        self.alarms = AlarmHistory(self._conn, self._lock)
+        self.tokens = MonitoringTokens(self._conn, self._lock, self._hasher)
         self.initialize()
 
     @property
@@ -193,6 +196,8 @@ class UserStore:
         with self._lock:
             self._conn.execute(_CREATE_SQL)
             self._conn.commit()
+        self.alarms.initialize()
+        self.tokens.initialize()
         self._secure_file()
 
     def _secure_file(self) -> None:

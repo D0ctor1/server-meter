@@ -15,7 +15,9 @@ def _installer_sees_nagios_header(text: str) -> bool:
 def test_health_is_public(client):
     response = client.get("/api/health")
     assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+    assert response.json()["status"] == "healthy"
+    assert "iaq" not in response.json()
+    assert "temperature_c" not in response.json()
 
 
 def test_protected_endpoints_require_auth(client):
@@ -30,6 +32,9 @@ def test_protected_endpoints_require_auth(client):
         "/api/settings",
         "/api/me",
         "/api/admin/users",
+        "/api/admin/export",
+        "/api/admin/system",
+        "/api/alarms/history",
     ):
         response = client.get(path)
         assert response.status_code == 401, path

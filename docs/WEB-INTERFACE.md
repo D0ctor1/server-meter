@@ -102,7 +102,9 @@ IAQ accuracy v API zůstává `stabilizing` / `low` / `medium` / `high`. UI to p
 | eCO2 | `eco2` | ppm |
 | bVOC | `bvoc` | ppm |
 
-Okno: 15 min / 1 h (výchozí) / 6 h / 24 h. Maximálně 720 bodů na graf.
+Okno: 15 min / 1 h (výchozí) / 6 h / 24 h / All. Maximálně 720 bodů na graf. Po restartu: **Žádná historická data.** Grafy zahrnují i statické IAQ, teplotu CPU, zátěž CPU a RAM (ukládané jen v RAM spolu se vzorkem).
+
+Nahoře je **SYSTEM HEALTH** (BME690, BSEC, I²C, stáří dat, SMTP, ochrana RAM, Web API) a aktivní alarmy. Historie alarmů je v SQLite, ne v RAM bufferu senzoru. Při tlaku na RAM se zobrazí žlutý pruh.
 
 ### Polling (zátěž Pi)
 

@@ -12,9 +12,23 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from server_meter.config import AppConfig
+from server_meter.sqlite_state import MONITORING_ROLE, MONITORING_USERNAME
 from server_meter.users import ANONYMOUS, AuthUser, UserStore
 
 _basic = HTTPBasic(auto_error=False)
+
+MONITORING_USER = AuthUser(id=-1, username=MONITORING_USERNAME, role=MONITORING_ROLE, enabled=True)
+MONITORING_PATHS = frozenset({"/api/monitoring"})
+
+
+def _bearer_token(request: Request) -> str | None:
+    header = request.headers.get("authorization") or ""
+    if header.lower().startswith("bearer "):
+        return header[7:].strip() or None
+    extra = request.headers.get("x-monitoring-token")
+    if extra:
+        return extra.strip() or None
+    return None
 
 
 def require_auth(config: AppConfig):
@@ -24,13 +38,27 @@ def require_auth(config: AppConfig):
     ) -> AuthUser:
         if not config.web.auth.enabled:
             return ANONYMOUS
+        token = _bearer_token(request)
+        store: UserStore = request.app.state.users
+        if token:
+            if store.tokens.authenticate(token):
+                if request.url.path.rstrip("/") not in MONITORING_PATHS:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Forbidden",
+                    )
+                return MONITORING_USER
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials",
+                headers={"WWW-Authenticate": "Basic realm=\"server-meter\""},
+            )
         if credentials is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Authentication required",
                 headers={"WWW-Authenticate": "Basic realm=\"server-meter\""},
             )
-        store: UserStore = request.app.state.users
         record = store.authenticate(credentials.username, credentials.password)
         if record is None:
             raise HTTPException(
