@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>server-meter</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="top">
+    <div>
+      <p class="eyebrow">Raspberry Pi 5 · BME690 · RAM-only</p>
+      <h1>server-meter</h1>
+    </div>
+    <div class="clock" id="local-clock">--:--:--</div>
+  </header>
+
+  <section class="status-grid" id="status-grid">
+    <article class="status-card" data-key="server">
+      <h2>Server</h2>
+      <p class="big" id="server-status">starting</p>
+      <p class="meta" id="app-uptime">uptime —</p>
+    </article>
+    <article class="status-card" data-key="sensor">
+      <h2>Sensor</h2>
+      <p class="big" id="sensor-status">unknown</p>
+      <p class="meta" id="sensor-age">last sample —</p>
+    </article>
+    <article class="status-card" data-key="cpu">
+      <h2>CPU</h2>
+      <p class="big" id="cpu-temp">—</p>
+      <p class="meta" id="cpu-load">load — · freq —</p>
+    </article>
+    <article class="status-card" data-key="ram">
+      <h2>RAM</h2>
+      <p class="big" id="ram-usage">—</p>
+      <p class="meta" id="ram-detail">used — / —</p>
+    </article>
+  </section>
+
+  <section>
+    <h2 class="section-title">Current values</h2>
+    <div class="cards" id="value-cards"></div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2 class="section-title">History (RAM)</h2>
+      <label class="range">
+        Window
+        <select id="history-window">
+          <option value="900">15 min</option>
+          <option value="3600" selected>1 hour</option>
+          <option value="21600">6 hours</option>
+          <option value="86400">24 hours</option>
+        </select>
+      </label>
+    </div>
+    <p class="hint">Charts start empty after every reboot. Samples are never written to the SD card.</p>
+    <div class="charts" id="charts"></div>
+  </section>
+
+  <footer>
+    <span>UTC timestamps internally · local time in the browser</span>
+    <span id="history-info">0 samples in RAM</span>
+  </footer>
+
+  <script src="/vendor/chart.umd.min.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
