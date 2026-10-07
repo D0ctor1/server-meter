@@ -51,6 +51,8 @@ class WebConfig(BaseModel):
     max_request_bytes: int = Field(default=16_384, ge=1024, le=1_048_576)
     # UI language only. Missing key → CZ so existing YAML keeps working.
     locale: str = DEFAULT_LOCALE
+    # SQLite file for accounts (not sensor history). Empty → default path.
+    users_db: str = ""
 
     @field_validator("locale", mode="before")
     @classmethod
@@ -396,10 +398,11 @@ class AppConfig(BaseModel):
                 raise ConfigError("web.auth.username is empty")
             if not auth.password:
                 raise ConfigError("web.auth.password is empty")
-            if len(auth.password) < 8:
+            if auth.password != "MIGRATED" and len(auth.password) < 8:
                 raise ConfigError("web.auth.password must be at least 8 characters in production")
             # CHANGE_ME is allowed so install.sh can start the service unattended.
-            # The UI flags default_password_active; change it after first login.
+            # After the first start, login uses SQLite hashes; YAML may stay as a
+            # one-time migration source. The UI flags default_password_active.
         if self.sensor.driver == "bme690" and self.sensor.type.upper() not in {"BME690", "BME69X"}:
             raise ConfigError("sensor.type must be BME690 when driver is bme690")
         if self.sensor.bsec.enabled and self.sensor.bsec.sample_rate == "lp":

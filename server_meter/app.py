@@ -13,13 +13,15 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from server_meter import __version__
-from server_meter.api.auth import require_auth
+from server_meter.api.auth import require_admin, require_auth
 from server_meter.api.routes import build_router, json_error
 from server_meter.api.settings import build_settings_router
+from server_meter.api.users import build_users_router
 from server_meter.config import AppConfig
 from server_meter.service import MeterService
+from server_meter.users import UserStore, migrate_yaml_admin, resolve_users_db_path
 
-WEB_ASSET_VERSION = f"{__version__}.ui3"
+WEB_ASSET_VERSION = f"{__version__}.ui4"
 
 
 def resolve_web_root() -> Path:
@@ -70,6 +72,9 @@ def create_app(config: AppConfig, service: MeterService | None = None) -> FastAP
             app.state.service.start_background()
         yield
         await app.state.service.shutdown()
+        store = getattr(app.state, "users", None)
+        if store is not None:
+            store.close()
 
     app = FastAPI(
         title="server-meter",
@@ -82,11 +87,18 @@ def create_app(config: AppConfig, service: MeterService | None = None) -> FastAP
     )
     app.state.config = config
     app.state.service = service or MeterService(config)
+    app.state.users = UserStore(
+        resolve_users_db_path(config),
+        test=config.application.environment == "test",
+    )
+    migrate_yaml_admin(app.state.users, config)
     app.add_middleware(SecurityHeadersMiddleware, max_request_bytes=config.web.max_request_bytes)
 
     auth_dep = require_auth(config)
+    admin_dep = require_admin(auth_dep)
     app.include_router(build_router(auth_dep))
-    app.include_router(build_settings_router(auth_dep))
+    app.include_router(build_settings_router(admin_dep))
+    app.include_router(build_users_router(auth_dep, admin_dep))
 
     if WEB_ROOT.is_dir():
         vendor = WEB_ROOT / "vendor"
@@ -118,7 +130,7 @@ def create_app(config: AppConfig, service: MeterService | None = None) -> FastAP
         app.router.routes = [r for r in app.router.routes if getattr(r, "path", None) != "/api/health"]
 
         @app.get("/api/health")
-        async def protected_health(_user: str = Depends(auth_dep)) -> dict[str, str]:
+        async def protected_health(_user=Depends(auth_dep)) -> dict[str, str]:
             return {"status": "ok", "service": "server-meter"}
 
     @app.exception_handler(HTTPException)

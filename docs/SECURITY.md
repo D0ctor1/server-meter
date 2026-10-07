@@ -10,36 +10,33 @@ Pro nedůvěryhodnou síť nebo vzdálený přístup z internetu použijte **HTT
 
 ---
 
-## HTTP Basic Auth
+## HTTP Basic Auth a účty
 
 | Položka | Implementace |
 |---|---|
 | Typ | RFC 7617 Basic (`Authorization: Basic …`) |
-| Kód | `server_meter/api/auth.py` |
-| Porovnání | `hmac.compare_digest` na username i password |
-| Úložiště hesla | **pouze YAML**, plaintext |
-| Hash v YAML | **neexistuje** |
-| Logování hesla | kód heslo neloguje a nevrací v `/api/status` ani `/api/settings` |
-| SMTP heslo | jen YAML; API vrací `password_set` |
+| Kód | `server_meter/api/auth.py`, `server_meter/users.py` |
+| Úložiště účtů | SQLite `/var/lib/server-meter/users.db` (mode 600) |
+| Hash hesla | Argon2id (`argon2-cffi`); plaintext se neukládá |
+| Role | `admin` (nastavení + uživatelé), `user` (jen čtení dashboardu/API) |
+| Session | žádné cookies; každá žádost ověří hash. Změna hesla / deaktivace / smazání hned zneplatní další request |
+| CSRF | Authorization header prohlížeč nepřipojuje na cizí formuláře; cookies se nepoužívají |
+| Logování hesla | kód heslo, hash ani tokeny neloguje |
 
-Ve výchozím YAML:
+YAML `web.auth.username` / `web.auth.password` slouží **jen k jednorázové migraci** prvního admina do SQLite. Opakovaný start účet neduplikuje. Přihlášení po migraci bere uživatele z databáze.
 
-```yaml
-web:
-  auth:
-    enabled: true
-    username: "admin"
-    password: "YOUR_PASSWORD"
-```
+Nagios plugin dál posílá Basic Auth (stejný admin nebo jiný účet). `/api/monitoring` smí číst `admin` i `user`.
+
+`/api/settings` a `/api/admin/users*` jsou jen pro `role=admin` (jinak **403**). Skrytí ozubeného kolečka ve frontendu nestačí.
+
+Posledního aktivního administrátora nelze smazat, deaktivovat ani změnit na `user` (kontrola na backendu, HTTP 409).
 
 V `environment: production`:
 
 - `auth.enabled` musí být `true`
-- username nesmí být prázdný
-- password nesmí být prázdné, minimálně **8 znaků**
-- `CHANGE_ME` je tovární heslo; po instalaci ho změňte a proveďte `sudo systemctl restart server-meter`
-
-Heslo **není** ve zdrojovém kódu. `CHANGE_ME` v `config.example.yaml` je výchozí hodnota, kterou UI označí jako aktivní tovární heslo.
+- YAML username nesmí být prázdný
+- YAML password nesmí být prázdné, minimálně **8 znaků** (nebo `MIGRATED`)
+- `CHANGE_ME` je tovární heslo; po přihlášení ho změňte v Nastavení → Uživatelé
 
 Prohlížeč i `curl -u` posílají údaje v každém požadavku. Na Wi-Fi kavárny nebo internet to bez TLS nepoužívejte.
 
@@ -77,6 +74,13 @@ sudo chown root:server-meter /etc/server-meter/config.yaml
 ```
 
 Nepoužívejte `chmod 777` ani `chmod 644` na soubor s heslem.
+
+SQLite s účty:
+
+```text
+/var/lib/server-meter           mode 750   server-meter:server-meter
+/var/lib/server-meter/users.db  mode 600   server-meter:server-meter
+```
 
 Aplikace YAML **nikdy zpět nezapisuje**.
 

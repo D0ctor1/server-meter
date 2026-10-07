@@ -20,13 +20,15 @@ Příklad: `http://192.168.1.50:8080/` — `192.168.1.50` je **příklad**.
 
 HTML `/` je veřejné, aby šlo lokalizovat přihlašovací formulář. **Data měření** jdou jen přes HTTP Basic Auth na `/api/*` (`web.auth.enabled: true`).
 
-Dashboard zobrazí formulář (CZ: Přihlášení / Uživatelské jméno / Heslo / Přihlásit). Zadejte `web.auth.username` a `web.auth.password` z `/etc/server-meter/config.yaml`. Špatné údaje: **Nesprávné uživatelské jméno nebo heslo** (EN: Invalid username or password).
+Dashboard zobrazí formulář (CZ: Přihlášení / Uživatelské jméno / Heslo / Přihlásit). Účty jsou v SQLite (`admin` / `user`). První admin vznikne migrací z YAML. Špatné údaje: **Nesprávné uživatelské jméno nebo heslo**.
+
+Role `admin` vidí ozubené kolečko ⚙ a Nastavení (Obecné, Uživatelé, Notifikace, SMTP, Alarmy, Systém). Role `user` kolečko nevidí a `/api/settings` i `/api/admin/users` dostanou **403**. Frontend se řídí `current_user.role`, ne jménem `admin`.
 
 Heslo se **neposílá v URL**. Prohlížeč ho drží v `sessionStorage` a posílá jako `Authorization: Basic` na API. Nagios a `curl -u` fungují stejně jako dřív.
 
 Bez správných údajů API vrací **401** (`{"detail":"Authentication required"}` / `Invalid credentials` — tyto JSON texty jsou součástí API a nemění se s locale).
 
-Pokud je v YAML stále `password: CHANGE_ME`, dashboard zobrazí žlutý pruh (lokalizovaný podle `web.locale`).
+Pokud některý aktivní účet stále používá tovární heslo `CHANGE_ME`, admin uvidí žlutý pruh (lokalizovaný podle `web.locale`). Heslo změňte v Nastavení → Uživatelé.
 
 API příznak: `application.default_password_active` (boolean, heslo se neposílá).
 

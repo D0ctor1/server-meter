@@ -115,7 +115,8 @@ sudo ./uninstall.sh
 ## What you get
 
 - dashboard (temperature, humidity, pressure, gas, IAQ, eCO2, bVOC, Pi CPU/RAM)
-- Settings (gear) for SMTP / email anomaly alerts
+- Settings (gear, **admin** only) for users, SMTP / email anomaly alerts
+- SQLite user accounts (`admin` / `user`); sensor history stays in RAM
 - REST API including `GET /api/monitoring`
 - Nagios Core: one self-contained `check_server_meter.sh` (curl only; no extra plugin config file). `$ARG1$` selects the metric so each value is its own Nagios service and performance-data series.
 - history and alarm state **only in RAM** (empty after reboot — by design)

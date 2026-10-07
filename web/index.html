@@ -26,10 +26,7 @@
 
   <div id="app" hidden>
     <div id="password-banner" class="banner" hidden data-i18n-html="banner.default_password_html">
-      Je aktivní výchozí heslo. Změňte heslo v souboru
-      <code>/etc/server-meter/config.yaml</code>
-      a poté spusťte
-      <code>sudo systemctl restart server-meter</code>.
+      Je aktivní výchozí heslo. Změňte je v Nastavení → Uživatelé.
     </div>
 
     <header class="top">
@@ -39,7 +36,7 @@
       </div>
       <div class="top-actions">
         <div class="clock" id="local-clock">--:--:--</div>
-        <button type="button" id="settings-button" class="icon-btn" data-i18n-aria="settings.open" title="⚙" aria-label="Nastavení">⚙</button>
+        <button type="button" id="settings-button" class="icon-btn" hidden data-i18n-aria="settings.open" title="⚙" aria-label="Nastavení">⚙</button>
         <button type="button" id="logout-button" class="logout" data-i18n="nav.logout">Odhlásit</button>
       </div>
     </header>
@@ -103,8 +100,41 @@
         <button type="button" id="settings-close" class="icon-btn" data-i18n-aria="settings.close" aria-label="Zavřít">×</button>
       </header>
       <p class="hint settings-disclaimer" data-i18n="settings.disclaimer">Výchozí hodnoty slouží k detekci výrazných odchylek a nejsou zdravotními limity.</p>
+      <nav class="settings-nav" aria-label="settings">
+        <button type="button" class="tab-btn is-active" data-tab="general" data-i18n="settings.tab.general">Obecné</button>
+        <button type="button" class="tab-btn" data-tab="users" data-i18n="settings.tab.users">Uživatelé</button>
+        <button type="button" class="tab-btn" data-tab="notifications" data-i18n="settings.tab.notifications">Notifikace</button>
+        <button type="button" class="tab-btn" data-tab="smtp" data-i18n="settings.tab.smtp">SMTP</button>
+        <button type="button" class="tab-btn" data-tab="thresholds" data-i18n="settings.tab.thresholds">Alarmy</button>
+        <button type="button" class="tab-btn" data-tab="system" data-i18n="settings.tab.system">Systém</button>
+      </nav>
+      <section class="settings-section settings-tab" data-tab-panel="general">
+        <h2 data-i18n="settings.tab.general">Obecné</h2>
+        <p class="hint" data-i18n="settings.general_hint">Jazyk webu se nastavuje v YAML (web.locale). Účty jsou v SQLite, historie měření zůstává jen v RAM.</p>
+        <p id="settings-general-info" class="meta"></p>
+      </section>
+      <section class="settings-section settings-tab" data-tab-panel="users" hidden>
+        <h2 data-i18n="settings.users">Uživatelé</h2>
+        <div class="users-toolbar">
+          <button type="button" id="user-add" class="secondary-btn" data-i18n="users.add">+ Přidat uživatele</button>
+        </div>
+        <div class="threshold-wrap">
+          <table class="threshold-table users-table">
+            <thead>
+              <tr>
+                <th data-i18n="users.col.username">Uživatelské jméno</th>
+                <th data-i18n="users.col.role">Role</th>
+                <th data-i18n="users.col.status">Stav</th>
+                <th data-i18n="users.col.created">Vytvořen</th>
+                <th data-i18n="users.col.actions">Akce</th>
+              </tr>
+            </thead>
+            <tbody id="users-body"></tbody>
+          </table>
+        </div>
+      </section>
       <form id="settings-form">
-        <section class="settings-section">
+        <section class="settings-section settings-tab" data-tab-panel="notifications" hidden>
           <h2 data-i18n="settings.notifications">Notifikace</h2>
           <label class="check-row">
             <input id="notify-enabled" type="checkbox">
@@ -124,7 +154,7 @@
           </label>
         </section>
 
-        <section class="settings-section">
+        <section class="settings-section settings-tab" data-tab-panel="smtp" hidden>
           <h2 data-i18n="settings.smtp">SMTP</h2>
           <label>
             <span data-i18n="settings.smtp_host">SMTP server</span>
@@ -164,7 +194,7 @@
           </label>
         </section>
 
-        <section class="settings-section">
+        <section class="settings-section settings-tab" data-tab-panel="thresholds" hidden>
           <h2 data-i18n="settings.thresholds">Prahové hodnoty</h2>
           <p class="hint" data-i18n="settings.air_note">IAQ, eCO₂ a bVOC jsou indikátory kvality vzduchu z BME690/BSEC, nikoliv certifikované měření škodlivin.</p>
           <div class="threshold-wrap">
@@ -187,11 +217,67 @@
         </section>
 
         <p id="settings-status" class="settings-status" role="status" hidden></p>
-        <div class="settings-actions">
+        <div class="settings-actions" id="settings-form-actions">
           <button type="button" id="settings-test" class="secondary-btn" data-i18n="settings.test_email">Odeslat testovací email</button>
           <button type="submit" id="settings-save" data-i18n="settings.save">Uložit</button>
         </div>
       </form>
+      <section class="settings-section settings-tab" data-tab-panel="system" hidden>
+        <h2 data-i18n="settings.tab.system">Systém</h2>
+        <p id="settings-system-info" class="hint"></p>
+      </section>
+    </div>
+  </div>
+
+  <div id="user-overlay" class="settings-overlay" hidden>
+    <form id="user-form" class="settings-panel user-dialog" role="dialog" aria-modal="true" aria-labelledby="user-form-title">
+      <header class="settings-head">
+        <h1 id="user-form-title" data-i18n="users.add_title">Přidat uživatele</h1>
+        <button type="button" id="user-form-close" class="icon-btn" data-i18n-aria="settings.close" aria-label="Zavřít">×</button>
+      </header>
+      <input type="hidden" id="user-id" value="">
+      <label>
+        <span data-i18n="users.username">Uživatelské jméno</span>
+        <input id="user-username" type="text" autocomplete="off" required maxlength="64">
+      </label>
+      <label>
+        <span data-i18n="users.password">Heslo</span>
+        <input id="user-password" type="password" autocomplete="new-password">
+      </label>
+      <label>
+        <span data-i18n="users.password_confirm">Potvrzení hesla</span>
+        <input id="user-password-confirm" type="password" autocomplete="new-password">
+      </label>
+      <label>
+        <span data-i18n="users.role">Role</span>
+        <select id="user-role">
+          <option value="user" data-i18n="users.role_user">Uživatel</option>
+          <option value="admin" data-i18n="users.role_admin">Administrátor</option>
+        </select>
+      </label>
+      <label>
+        <span data-i18n="users.status">Stav</span>
+        <select id="user-enabled">
+          <option value="1" data-i18n="users.active">Aktivní</option>
+          <option value="0" data-i18n="users.disabled">Neaktivní</option>
+        </select>
+      </label>
+      <p id="user-form-error" class="login-error" role="alert" hidden></p>
+      <div class="settings-actions">
+        <button type="button" id="user-form-cancel" class="secondary-btn" data-i18n="users.cancel">Zrušit</button>
+        <button type="submit" data-i18n="users.save">Uložit</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="user-delete-overlay" class="settings-overlay" hidden>
+    <div class="settings-panel user-dialog" role="alertdialog" aria-labelledby="user-delete-title">
+      <h1 id="user-delete-title" data-i18n="users.delete_confirm">Opravdu chcete tohoto uživatele odstranit?</h1>
+      <p id="user-delete-name" class="hint"></p>
+      <div class="settings-actions">
+        <button type="button" id="user-delete-cancel" class="secondary-btn" data-i18n="users.cancel">Zrušit</button>
+        <button type="button" id="user-delete-confirm" class="danger-btn" data-i18n="users.delete">Odstranit</button>
+      </div>
     </div>
   </div>
 

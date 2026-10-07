@@ -28,6 +28,8 @@ def test_protected_endpoints_require_auth(client):
         "/api/nagios/check",
         "/api/monitoring",
         "/api/settings",
+        "/api/me",
+        "/api/admin/users",
     ):
         response = client.get(path)
         assert response.status_code == 401, path

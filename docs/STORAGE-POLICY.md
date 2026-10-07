@@ -25,7 +25,7 @@ delete oldest samples
 SD CARD
 ```
 
-Test v CI: `tests/test_disk_policy.py` (žádný `sqlite3`, `FileHandler`, volání `bsec_get_state(`).
+Test v CI: `tests/test_disk_policy.py` (`sqlite3` jen pro účty v `users.py`, žádný `FileHandler`, žádné volání `bsec_get_state(`).
 
 ---
 
@@ -40,6 +40,7 @@ Statické, spravované operátorem. Aplikace to za běhu **nepřepisuje**:
 | Statický frontend | `/opt/server-meter/web/` |
 | Python venv | `/opt/server-meter/venv/` |
 | YAML konfigurace (včetně SMTP) | `/etc/server-meter/config.yaml` |
+| SQLite uživatelské účty | `/var/lib/server-meter/users.db` (ne historie měření) |
 | systemd unit | `/etc/systemd/system/server-meter.service` |
 | BSEC `.so` (volitelně) | `/opt/server-meter/lib/libalgobsec.so` |
 | Dokumentace | `/opt/server-meter/docs/` |
@@ -68,7 +69,7 @@ Po restartu může chvíli trvat, než BSEC dosáhne vyšší IAQ accuracy. To j
 
 ## Zakázáno (aplikace to nedělá)
 
-- SQLite / jiná databáze měření
+- SQLite / jiná databáze měření (`users.db` drží jen účty, ne vzorky)
 - CSV / JSON soubor historie
 - pickle / shelve
 - periodický export měření na disk
@@ -76,7 +77,7 @@ Po restartu může chvíli trvat, než BSEC dosáhne vyšší IAQ accuracy. To j
 - persistace BSEC kalibrace
 - InfluxDB, Redis, Prometheus client v runtime závislostech
 
-`requirements.txt` obsahuje jen FastAPI, Uvicorn, Pydantic, PyYAML, smbus2.
+`requirements.txt` obsahuje FastAPI, Uvicorn, Pydantic, PyYAML, smbus2 a argon2-cffi (hashe hesel). `sqlite3` je ve stdlib a používá se jen pro tabulku `users`.
 
 ---
 

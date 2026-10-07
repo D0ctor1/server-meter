@@ -10,7 +10,7 @@ sudo ./install.sh
 
 Skript nainstaluje závislosti, zapne I²C, najde BME690 (chip ID `0x61` na `0x76`/`0x77`), vytvoří uživatele, venv, YAML, systemd, volatile journald a spustí službu. Heslo v YAML **nesmaže** při opakovaném spuštění.
 
-Jediný ruční zásah po úspěchu: změnit `password: CHANGE_ME` v `/etc/server-meter/config.yaml` a `sudo systemctl restart server-meter`.
+Jediný ruční zásah po úspěchu: přihlásit se jako admin (YAML heslo se jednou migrujte do SQLite) a změnit heslo v Nastavení → Uživatelé. YAML se při upgradu nepřepisuje.
 
 Níže je referenční popis toho, co instalátor dělá, plus Ubuntu z Imageru.
 

@@ -165,7 +165,13 @@ ensure_user_and_dirs() {
     "${PREFIX}/lib"
   chmod 0750 /run/server-meter
   chown "${SERVICE_USER}:${SERVICE_USER}" /run/server-meter
-  chmod 0755 "${PREFIX}" "${STATE_DIR}"
+  chmod 0755 "${PREFIX}"
+  chown "${SERVICE_USER}:${SERVICE_USER}" "${STATE_DIR}"
+  chmod 0750 "${STATE_DIR}"
+  if [[ -f "${STATE_DIR}/users.db" ]]; then
+    chown "${SERVICE_USER}:${SERVICE_USER}" "${STATE_DIR}/users.db"
+    chmod 0600 "${STATE_DIR}/users.db"
+  fi
   # Directory must be traversable by the service user (640 on the file is not enough).
   chown "root:${SERVICE_USER}" "${CONFIG_DIR}"
   chmod 0750 "${CONFIG_DIR}"
@@ -197,7 +203,7 @@ setup_venv() {
   # under systemd even if cwd is not on sys.path (Python 3.14).
   "${PREFIX}/venv/bin/pip" install --no-deps --force-reinstall "${PREFIX}" -q
   chmod -R a+rX "${PREFIX}/server_meter" "${PREFIX}/web" "${PREFIX}/config" || true
-  if ! PYTHONPATH="${PREFIX}" "${PREFIX}/venv/bin/python" -c "import server_meter, fastapi, uvicorn, yaml"; then
+  if ! PYTHONPATH="${PREFIX}" "${PREFIX}/venv/bin/python" -c "import server_meter, fastapi, uvicorn, yaml, argon2"; then
     fail "Python environment" "venv cannot import server-meter. Check pip output above."
   fi
 }

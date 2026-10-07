@@ -58,9 +58,11 @@ DeviceAllow=/dev/i2c-2 rw
 DeviceAllow=/dev/null rw
 DeviceAllow=/dev/urandom r
 DeviceAllow=/dev/random r
-# No writable application paths: config is read-only and history stays in RAM.
-ReadOnlyPaths=/opt/server-meter /etc/server-meter
-ReadWritePaths=
+# Config YAML (Settings) and SQLite user accounts. Sensor history stays in RAM.
+ReadOnlyPaths=/opt/server-meter
+ReadWritePaths=/etc/server-meter /var/lib/server-meter
+StateDirectory=server-meter
+StateDirectoryMode=0750
 
 [Install]
 WantedBy=multi-user.target
