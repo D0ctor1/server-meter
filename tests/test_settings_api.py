@@ -62,9 +62,10 @@ def test_settings_put_keeps_password_when_blank(tmp_path, auth):
         reloaded = yaml.safe_load((tmp_path / "config.yaml").read_text(encoding="utf-8"))
         assert reloaded["notifications"]["email"]["smtp"]["password"] == "smtp-secret-value"
         assert cfg.notifications.email.smtp.password == "smtp-secret-value"
-        history = yaml.safe_dump(reloaded)
-        assert "temperature:" in history  # config, not samples
-        assert "samples:" not in history
+        dumped = yaml.safe_dump(reloaded)
+        assert "smtp-secret-value" in dumped
+        assert "timestamp:" not in dumped
+        assert reloaded.get("history", {}).get("max_samples") == 100
 
 
 def test_monitoring_is_language_neutral(tmp_path, auth):

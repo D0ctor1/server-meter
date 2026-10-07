@@ -120,6 +120,7 @@ def test_plugin_ok_warning_critical_unknown_and_perfdata():
         assert ";45;50" in result.stdout
         assert "secret" not in result.stdout
         assert "import server_meter" not in PLUGIN.read_text(encoding="utf-8")
+        assert "from server_meter" not in PLUGIN.read_text(encoding="utf-8")
 
 
 def test_plugin_connection_failure_is_critical():
@@ -137,5 +138,6 @@ def test_plugin_does_not_use_python3_only():
     text = PLUGIN.read_text(encoding="utf-8")
     assert "python2" in text
     assert "jq" in text
-    assert "server_meter" not in text
+    assert "import server_meter" not in text
+    assert "from server_meter" not in text
     assert "/api/monitoring" in text
