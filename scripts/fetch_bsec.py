@@ -258,13 +258,15 @@ def main() -> int:
         text = json.dumps(payload)
         if args.json_out:
             Path(args.json_out).write_text(text + "\n", encoding="utf-8")
-        sys.stdout.write(text + "\n")
+        else:
+            sys.stdout.write(text + "\n")
         return 1
     payload = {"license": LICENSE_PDF, **result}
     text = json.dumps(payload)
     if args.json_out:
         Path(args.json_out).write_text(text + "\n", encoding="utf-8")
-    sys.stdout.write(text + "\n")
+    else:
+        sys.stdout.write(text + "\n")
     return 0
 
 

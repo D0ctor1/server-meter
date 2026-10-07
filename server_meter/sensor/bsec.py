@@ -21,7 +21,6 @@ import os
 from ctypes import (
     POINTER,
     Structure,
-    c_char_p,
     c_float,
     c_int64,
     c_size_t,
@@ -44,10 +43,13 @@ logger = logging.getLogger("server_meter.bsec")
 
 BSEC_MAX_PHYSICAL_SENSOR = 8
 BSEC_MAX_WORKBUFFER_SIZE = 4096
-BSEC_NUMBER_OUTPUTS = 23
+BSEC_MAX_PROPERTY_BLOB_SIZE = 550
+BSEC_NUMBER_OUTPUTS = 15
 BSEC_SAMPLE_RATE_LP = 0.33333
 BSEC_SAMPLE_RATE_ULP = 0.0033333
 BSEC_OK = 0
+# Bosch bsec_library_return_t: 0 success, >0 warning/info, <0 error.
+BSEC_W_SU_SAMPLERATEMISMATCH = 14
 
 BSEC_INPUT_PRESSURE = 1
 BSEC_INPUT_HUMIDITY = 2
@@ -70,7 +72,23 @@ BSEC_OUTPUT_RUN_IN_STATUS = 13
 BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE = 14
 BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY = 15
 BSEC_OUTPUT_GAS_PERCENTAGE = 21
-BSEC_OUTPUT_TVOC_EQUIVALENT = 32
+BSEC_OUTPUT_TVOC_EQUIVALENT = 31  # BSEC 3.3 bsec_virtual_sensor_t (not 32)
+
+def bsec_status_ok(status: int) -> bool:
+    """Bosch: 0 = success, positive = warning/info, negative = error."""
+    return int(status) >= 0
+
+
+def load_bsec_config_blob(data: bytes) -> bytes:
+    """Bosch .config files are a uint32 LE length prefix plus the property blob."""
+    if len(data) >= 4:
+        declared = int.from_bytes(data[:4], "little")
+        if 0 < declared <= BSEC_MAX_PROPERTY_BLOB_SIZE and declared + 4 <= len(data):
+            return data[4 : 4 + declared]
+    if len(data) > BSEC_MAX_PROPERTY_BLOB_SIZE:
+        return data[:BSEC_MAX_PROPERTY_BLOB_SIZE]
+    return data
+
 
 BSEC_PROCESS_PRESSURE = 1 << (BSEC_INPUT_PRESSURE - 1)
 BSEC_PROCESS_TEMPERATURE = 1 << (BSEC_INPUT_TEMPERATURE - 1)
@@ -202,7 +220,7 @@ class BsecProcessor:
             raise BsecUnavailableError(f"unexpected BSEC instance size {size}")
         self._instance = (c_uint8 * size)()
         status = lib.bsec_init(self._instance)
-        if status != BSEC_OK:
+        if not bsec_status_ok(status):
             raise BsecUnavailableError(f"bsec_init failed: {status}")
         version = BsecVersion()
         lib.bsec_get_version(self._instance, ctypes.byref(version))
@@ -249,7 +267,7 @@ class BsecProcessor:
         status = self._lib.bsec_do_steps(
             self._instance, inputs, c_uint8(n), outputs, ctypes.byref(n_outputs)
         )
-        if status != BSEC_OK:
+        if not bsec_status_ok(status):
             logger.warning("bsec_do_steps status=%s", status)
             return None
         return _parse_outputs(outputs, int(n_outputs.value))
@@ -297,9 +315,9 @@ class BsecProcessor:
         lib.bsec_do_steps.restype = ctypes.c_int
         lib.bsec_set_configuration.argtypes = [
             c_void_p,
-            c_char_p,
+            POINTER(c_uint8),
             c_uint32,
-            c_char_p,
+            POINTER(c_uint8),
             c_uint32,
         ]
         lib.bsec_set_configuration.restype = ctypes.c_int
@@ -312,19 +330,23 @@ class BsecProcessor:
         if not path.is_file():
             logger.warning("BSEC config blob not found: %s (continuing with library defaults)", path)
             return
-        data = path.read_bytes()
-        work = (ctypes.c_uint8 * BSEC_MAX_WORKBUFFER_SIZE)()
+        data = load_bsec_config_blob(path.read_bytes())
+        blob = (c_uint8 * len(data)).from_buffer_copy(data)
+        work = (c_uint8 * BSEC_MAX_WORKBUFFER_SIZE)()
         status = lib.bsec_set_configuration(
             self._instance,
-            data,
+            blob,
             c_uint32(len(data)),
             work,
             c_uint32(BSEC_MAX_WORKBUFFER_SIZE),
         )
-        if status != BSEC_OK:
+        if not bsec_status_ok(status):
             logger.warning("bsec_set_configuration failed: %s", status)
         else:
-            logger.info("BSEC configuration blob applied from %s (%d bytes, read-only)", path, len(data))
+            if status > 0:
+                logger.info("BSEC configuration blob applied from %s (%d bytes, warning %s)", path, len(data), status)
+            else:
+                logger.info("BSEC configuration blob applied from %s (%d bytes, read-only)", path, len(data))
 
     def _subscribe(self, lib: ctypes.CDLL) -> None:
         rate = BSEC_SAMPLE_RATE_ULP if self._config.sample_rate == "ulp" else BSEC_SAMPLE_RATE_LP
@@ -350,10 +372,23 @@ class BsecProcessor:
 
         requested_ids = list(output_ids)
         status = self._try_subscribe(lib, requested_ids + optional, rate)
-        if status != BSEC_OK:
+        if not bsec_status_ok(status):
             status = self._try_subscribe(lib, requested_ids, rate)
-        if status != BSEC_OK:
+        if not bsec_status_ok(status):
+            core = [
+                BSEC_OUTPUT_IAQ,
+                BSEC_OUTPUT_STATIC_IAQ,
+                BSEC_OUTPUT_CO2_EQUIVALENT,
+                BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE,
+                BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY,
+                BSEC_OUTPUT_STABILIZATION_STATUS,
+                BSEC_OUTPUT_RUN_IN_STATUS,
+            ]
+            status = self._try_subscribe(lib, core, rate)
+        if not bsec_status_ok(status):
             raise BsecUnavailableError(f"bsec_update_subscription failed: {status}")
+        if status > 0:
+            logger.info("bsec_update_subscription warning %s (outputs still subscribed)", status)
 
     def _try_subscribe(self, lib: ctypes.CDLL, output_ids: list[int], rate: float) -> int:
         n = len(output_ids)

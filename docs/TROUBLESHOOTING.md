@@ -172,7 +172,9 @@ journalctl -u server-meter --no-pager -n 80 | grep -i bsec
 
 `uname -m` musí být `aarch64`. 32bit `.so` na Pi 5 Ubuntu 64-bit **nesedí**.
 
-Bosch složka: **PiFour_Armv8** / `aarch64-linux-gnu`. `sudo ./install.sh` oficiální ZIP stáhne samo. Když soubor chybí: `SERVER_METER_BSEC_REFRESH=1 sudo ./install.sh`. Postup: [BME690-BSEC.md](BME690-BSEC.md).
+Bosch složka: **PiFour_Armv8** / `aarch64-linux-gnu`. `sudo ./install.sh` oficiální ZIP stáhne samo. Když soubor chybí: `SERVER_METER_BSEC_REFRESH=1 sudo ./install.sh`.
+
+Log `bsec_update_subscription failed: 14` je Bosch **varování** (nesoulad vzorkovací frekvence), ne chybějící knihovna. Aplikace ho bere jako úspěch. Postup: [BME690-BSEC.md](BME690-BSEC.md).
 
 YAML:
 

@@ -416,7 +416,8 @@ download_official_bsec() {
   if [[ ! -f "${script}" ]]; then
     script="${SRC_DIR}/scripts/fetch_bsec.py"
   fi
-  if ! python3 "${script}" --work-dir "${work}" --json-out "${json}"; then
+  if ! python3 "${script}" --work-dir "${work}" --json-out "${json}" \
+      >"${work}/fetch.log" 2>&1; then
     return 1
   fi
   archive="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("archive",""))' "${json}")"
@@ -696,7 +697,21 @@ Acceptance:
 ====================================================
 EOF
   if [[ "${BSEC_OK}" -eq 0 ]]; then
-    cat <<EOF
+    if [[ -n "${BSEC_LIB}" && -f "${BSEC_LIB}" ]]; then
+      cat <<EOF
+
+====================================================
+BSEC library is installed, but IAQ did not initialize
+====================================================
+
+${BSEC_LIB} is present. Temperature / humidity / pressure / gas work.
+IAQ, eCO2 and bVOC stay empty until BSEC accepts the subscription.
+
+  journalctl -u server-meter --no-pager -n 80 | grep -i bsec
+====================================================
+EOF
+    else
+      cat <<EOF
 
 ====================================================
 BLOCKER: Bosch BSEC 3.x library is not present
@@ -710,15 +725,13 @@ IAQ, eCO2 and bVOC stay empty until BSEC is present. Retry:
 
   sudo ./install.sh
 
-or copy an ARM64 libalgobsec.so to:
-  ${PREFIX}/lib/libalgobsec.so
-
 License:
 https://www.bosch-sensortec.com/media/boschsensortec/downloads/software/bme688_development_software/2024_12/20241219_clickthrough_license_terms_bsec_bme680_bme688_bme690.pdf
 
 Temperature, humidity, pressure and gas resistance already work.
 ====================================================
 EOF
+    fi
   fi
 }
 
