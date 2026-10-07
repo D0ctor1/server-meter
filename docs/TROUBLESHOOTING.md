@@ -317,9 +317,23 @@ journalctl -u server-meter --no-pager -n 100
 | Log | Náprava |
 |---|---|
 | password too short / empty | YAML `web.auth.password` (min. 8 znaků) |
-| `No configuration file found` | `/etc/server-meter/config.yaml` |
+| `Configuration file not found` / `No configuration file found` | soubor může existovat; `/etc/server-meter` musí být **0750** `root:server-meter` |
+| `Configuration directory not accessible` | `sudo chown root:server-meter /etc/server-meter && sudo chmod 0750 /etc/server-meter` |
+| `Configuration file not readable` | `sudo chmod 640 /etc/server-meter/config.yaml && sudo chown root:server-meter /etc/server-meter/config.yaml` |
 | `Address already in use` | cizí proces na 8080 |
 | `Failed to start` limit burst | `sudo systemctl reset-failed server-meter` po opravě |
+
+Když journal říká `Configuration file not found: /etc/server-meter/config.yaml`, ale `sudo cat` ten soubor ukáže, jde o **práva adresáře**, ne o chybějící YAML. `Path.is_file()` bez práva `+x` na rodiči vrátí false.
+
+```bash
+stat -c '%a %U %G %n' /etc/server-meter /etc/server-meter/config.yaml
+sudo chown root:server-meter /etc/server-meter
+sudo chmod 0750 /etc/server-meter
+sudo chmod 640 /etc/server-meter/config.yaml
+sudo chown root:server-meter /etc/server-meter/config.yaml
+sudo systemctl reset-failed server-meter
+sudo systemctl start server-meter
+```
 
 Ruční start (vidíte stderr):
 
@@ -398,7 +412,8 @@ ls -l /dev/i2c*
 sudo i2cdetect -y 1
 id server-meter
 groups server-meter
-stat -c '%a %U %G' /etc/server-meter/config.yaml
+stat -c '%a %U %G' /etc/server-meter /etc/server-meter/config.yaml
+sudo -u server-meter test -r /etc/server-meter/config.yaml && echo readable
 ls -l /opt/server-meter/venv/bin/python
 ls -l /opt/server-meter/lib/libalgobsec.so
 free -h

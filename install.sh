@@ -165,6 +165,8 @@ ensure_user_and_dirs() {
   chmod 0750 /run/server-meter
   chown "${SERVICE_USER}:${SERVICE_USER}" /run/server-meter
   chmod 0755 "${PREFIX}" "${STATE_DIR}"
+  # Directory must be traversable by the service user (640 on the file is not enough).
+  chown "root:${SERVICE_USER}" "${CONFIG_DIR}"
   chmod 0750 "${CONFIG_DIR}"
 }
 
@@ -378,8 +380,15 @@ write_config() {
     --bus "${DETECTED_BUS}" \
     --address "${DETECTED_ADDR}" \
     --bsec-lib "${BSEC_LIB}" >/run/server-meter/write-config.out
+  chown "root:${SERVICE_USER}" "${CONFIG_DIR}"
+  chmod 0750 "${CONFIG_DIR}"
   chmod 640 "${CONFIG_FILE}"
   chown "root:${SERVICE_USER}" "${CONFIG_FILE}"
+  if ! su -s /bin/sh "${SERVICE_USER}" -c "test -r '${CONFIG_FILE}'"; then
+    fail "Configuration not readable" \
+      "${CONFIG_FILE} exists but user ${SERVICE_USER} cannot read it.
+$(stat -c '%a %U %G %n' "${CONFIG_DIR}" "${CONFIG_FILE}" 2>/dev/null || true)"
+  fi
   ok
 }
 
@@ -413,9 +422,20 @@ service_diagnostics() {
     journalctl -u server-meter --no-pager -n 80 || true
     echo "--- listeners ---"
     ss -lntp 2>/dev/null | grep -E '8080|python' || echo "nothing on 8080"
-    echo "--- preflight ---"
+    echo "--- config perms ---"
+    stat -c '%a %U %G %n' "${CONFIG_DIR}" "${CONFIG_FILE}" 2>/dev/null || true
+    if su -s /bin/sh "${SERVICE_USER}" -c "test -x '${CONFIG_DIR}' && test -r '${CONFIG_FILE}'"; then
+      echo "readable by ${SERVICE_USER}"
+    else
+      echo "NOT readable by ${SERVICE_USER}"
+    fi
+    echo "--- preflight root ---"
     PYTHONPATH="${PREFIX}" "${PREFIX}/venv/bin/python" -c \
       "from server_meter.config import load_config; c=load_config('${CONFIG_FILE}'); print('config', c.web.host, c.web.port, c.sensor.driver)" \
+      || true
+    echo "--- preflight ${SERVICE_USER} ---"
+    su -s /bin/sh "${SERVICE_USER}" -c \
+      "PYTHONPATH='${PREFIX}' '${PREFIX}/venv/bin/python' -c \"from server_meter.config import load_config; c=load_config('${CONFIG_FILE}'); print('config', c.web.host, c.web.port, c.sensor.driver)\"" \
       || true
   } 2>&1
 }

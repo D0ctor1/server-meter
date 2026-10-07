@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from server_meter.config import AppConfig, ConfigError, load_config
@@ -127,5 +129,31 @@ def test_bsec_persist_state_forbidden():
 
 
 def test_missing_config_file(tmp_path):
-    with pytest.raises(ConfigError):
+    with pytest.raises(ConfigError, match="not found"):
         load_config(tmp_path / "nope.yaml")
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses directory mode bits")
+def test_inaccessible_config_directory(tmp_path):
+    hidden = tmp_path / "hidden"
+    hidden.mkdir()
+    cfg = hidden / "config.yaml"
+    cfg.write_text("web: {}\n", encoding="utf-8")
+    hidden.chmod(0o000)
+    try:
+        with pytest.raises(ConfigError, match="not accessible"):
+            load_config(cfg)
+    finally:
+        hidden.chmod(0o700)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses file mode bits")
+def test_unreadable_config_file(tmp_path):
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("web: {}\n", encoding="utf-8")
+    cfg.chmod(0o000)
+    try:
+        with pytest.raises(ConfigError, match="not readable"):
+            load_config(cfg)
+    finally:
+        cfg.chmod(0o600)

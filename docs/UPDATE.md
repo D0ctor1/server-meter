@@ -185,6 +185,8 @@ Nová verze server-meter Bosch ZIP **nestahuje**. Ponechte `libalgobsec.so`. Pok
 ```bash
 sudo systemctl stop server-meter
 sudo cp -a /etc/server-meter/config.yaml.bak.YYYYMMDD /etc/server-meter/config.yaml
+sudo chown root:server-meter /etc/server-meter
+sudo chmod 0750 /etc/server-meter
 sudo chmod 640 /etc/server-meter/config.yaml
 sudo chown root:server-meter /etc/server-meter/config.yaml
 ```

@@ -2,7 +2,7 @@
 
 Jednotka v gitu: `systemd/server-meter.service`.
 
-`scripts/install.sh` ji zkopíruje na:
+`install.sh` ji zkopíruje na:
 
 ```text
 /etc/systemd/system/server-meter.service
@@ -26,6 +26,7 @@ a provede `systemctl daemon-reload` + `systemctl enable`. **Nespouští** `start
 | `PrivateTmp` | `true` (privátní tmpfs, ne SD) |
 | `ProtectSystem` | `strict` |
 | `ReadOnlyPaths` | `/opt/server-meter` `/etc/server-meter` |
+| Config dir | `/etc/server-meter` mode **0750** `root:server-meter` (uživatel služby musí umět adresář projít; 640 jen na YAML nestačí) |
 | `ReadWritePaths` | prázdné |
 | `DeviceAllow` | `/dev/i2c-0`, `/dev/i2c-1`, `/dev/i2c-2` rw |
 
@@ -228,7 +229,8 @@ Starý adresář `/var/log/journal` může zůstat z dřívějška. Nové zázna
 | Cesta | Použití server-meter |
 |---|---|
 | `/opt/server-meter` | kód + venv, **read-only** pro proces (`ProtectSystem=strict`) |
-| `/etc/server-meter/config.yaml` | čtení při startu, nikdy zápis zpět |
+| `/etc/server-meter` | mode **0750** `root:server-meter` — proces musí adresář projít |
+| `/etc/server-meter/config.yaml` | čtení při startu (640 `root:server-meter`), nikdy zápis zpět |
 | `/tmp` procesu | `PrivateTmp=true` (RAM), aplikace ho k měřením nepoužívá |
 | `/run/server-meter` | **neexistuje** — unit ho nevytváří |
 
@@ -240,7 +242,7 @@ Nevytvářejte runtime soubory v `/opt/server-meter`. Pokud byste unit upravili 
 
 `StartLimitIntervalSec=60`, `StartLimitBurst=5`, `Restart=always`.
 
-Když YAML obsahuje prázdné nebo příliš krátké heslo, proces končí kódem **2**. Systemd ho restartuje, až narazí na limit → `failed`. Tovární `CHANGE_ME` (9 znaků) start **povolí**.
+Když YAML obsahuje prázdné nebo příliš krátké heslo, proces končí kódem **2**. Stejný kód 2 dává i `Configuration file not found`, když `/etc/server-meter` není 0750 `root:server-meter` (uživatel služby adresář neprojde, i když YAML existuje). Systemd ho restartuje, až narazí na limit → `failed`. Tovární `CHANGE_ME` (9 znaků) start **povolí**.
 
 ### Ověř
 

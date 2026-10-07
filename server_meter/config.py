@@ -270,6 +270,12 @@ def _default_config_paths() -> list[Path]:
 def load_config(path: str | Path | None = None) -> AppConfig:
     if path is not None:
         config_path = Path(path)
+        if not os.access(config_path.parent, os.X_OK):
+            raise ConfigError(
+                f"Configuration directory not accessible by this user: {config_path.parent}"
+            )
+        if config_path.exists() and not os.access(config_path, os.R_OK):
+            raise ConfigError(f"Configuration file not readable: {config_path}")
         if not config_path.is_file():
             raise ConfigError(f"Configuration file not found: {config_path}")
         return _parse_yaml(config_path)

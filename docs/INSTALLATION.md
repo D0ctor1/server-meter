@@ -365,9 +365,11 @@ Hlavní vstup je kořenový **`./install.sh`** (wrapper `scripts/install.sh` ho 
 - vytvoří venv **`/opt/server-meter/venv`** (ne `.venv`)
 - `pip install -r /opt/server-meter/requirements.txt`
 - pokud chybí `/etc/server-meter/config.yaml`, zkopíruje example (heslo `CHANGE_ME`)
+- `chmod 0750` a `chown root:server-meter` na `/etc/server-meter` (uživatel služby musí adresář projít)
 - `chmod 640` a `chown root:server-meter` na YAML
+- ověří `test -r` jako uživatel `server-meter`
 - nainstaluje unit do `/etc/systemd/system/server-meter.service`
-- `systemctl daemon-reload` a **`systemctl enable`** (službu **nespouští**)
+- `systemctl daemon-reload`, `systemctl enable` a `systemctl start`
 
 ### Proveď
 
@@ -384,6 +386,7 @@ Skript musí běžet jako root (`sudo`).
 id server-meter
 groups server-meter
 ls -l /opt/server-meter/venv/bin/python
+ls -ld /etc/server-meter
 ls -l /etc/server-meter/config.yaml
 systemctl is-enabled server-meter
 ```
@@ -392,6 +395,7 @@ systemctl is-enabled server-meter
 
 - uživatel `server-meter` existuje, shell `/usr/sbin/nologin`
 - v `groups` je ideálně `i2c` (pokud ne, viz krok 8.1)
+- adresář je `drwxr-x--- root server-meter` (0750)
 - YAML je `-rw-r----- root server-meter`
 - služba je `enabled`
 
@@ -463,12 +467,13 @@ Kompletní vysvětlení klíčů: [CONFIGURATION.md](CONFIGURATION.md).
 ### Ověř práva
 
 ```bash
-stat -c '%a %U %G' /etc/server-meter/config.yaml
+stat -c '%a %U %G' /etc/server-meter /etc/server-meter/config.yaml
+sudo -u server-meter test -r /etc/server-meter/config.yaml && echo readable
 ```
 
-**Očekávaný výsledek:** `640 root server-meter`
+**Očekávaný výsledek:** `750 root server-meter`, `640 root server-meter` a `readable`.
 
-(Skript nastavuje 640, ne 600, aby uživatel služby ve skupině `server-meter` soubor přečetl.)
+(Skript nastavuje 0750 na adresáři a 640 na YAML, ne 600, aby uživatel služby ve skupině `server-meter` soubor přečetl. 640 jen na souboru nestačí, pokud adresář zůstane `root:root`.)
 
 ---
 

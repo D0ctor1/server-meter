@@ -49,22 +49,28 @@ Prohlížeč i `curl -u` posílají údaje v každém požadavku. Na Wi-Fi kavá
 `install.sh` nastaví:
 
 ```text
+/etc/server-meter               mode 750   root:server-meter
 /etc/server-meter/config.yaml   mode 640   root:server-meter
 ```
 
-640 = root čte/píše, skupina `server-meter` čte, ostatní nic.
+750 na adresáři = root a skupina `server-meter` smí adresář projít. 640 na YAML = root čte/píše, skupina `server-meter` čte, ostatní nic.
+
+Samotné 640 na souboru **nestačí**: když je `/etc/server-meter` `root:root` 0750, uživatel `server-meter` soubor „nevidí“ (`Path.is_file()` vrátí false → `Configuration file not found`).
 
 ### Ověř
 
 ```bash
-stat -c '%a %U %G' /etc/server-meter/config.yaml
+stat -c '%a %U %G' /etc/server-meter /etc/server-meter/config.yaml
+sudo -u server-meter test -r /etc/server-meter/config.yaml && echo readable
 ```
 
-Očekávaný výsledek: `640 root server-meter`.
+Očekávaný výsledek: `750 root server-meter` a `640 root server-meter`, plus `readable`.
 
 Úprava:
 
 ```bash
+sudo chown root:server-meter /etc/server-meter
+sudo chmod 0750 /etc/server-meter
 sudo chmod 640 /etc/server-meter/config.yaml
 sudo chown root:server-meter /etc/server-meter/config.yaml
 ```
