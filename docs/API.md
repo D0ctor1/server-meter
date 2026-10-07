@@ -13,7 +13,7 @@ Tento dokument popisuje **skutečné** trasy v `server_meter/api/routes.py` a `s
 | Trasa | Auth ve výchozím YAML |
 |---|---|
 | `GET /api/health` | **ne** (`web.health_public: true`) |
-| `GET /` (HTML dashboard) | HTTP Basic Auth |
+| `GET /` (HTML dashboard + login form) | **ne** (API data zůstávají za Basic Auth) |
 | `GET /api/status` | HTTP Basic Auth |
 | `GET /api/current` | HTTP Basic Auth |
 | `GET /api/history` | HTTP Basic Auth |
@@ -22,6 +22,8 @@ Tento dokument popisuje **skutečné** trasy v `server_meter/api/routes.py` a `s
 | `GET /api/nagios/check` | HTTP Basic Auth |
 | `GET /css/*`, `/js/*`, `/vendor/*` | **ne** (statické soubory) |
 | `GET /docs`, `/redoc`, `/openapi.json` | v production **vypnuto** (`404`) |
+
+JSON klíče a technické hodnoty API (`temperature`, `status: "warning"`, …) se **nemění** podle `web.locale`. Locale ovlivňuje jen HTML/JS dashboard.
 
 Implementace: `server_meter/api/auth.py` (`HTTPBasic`, `hmac.compare_digest`).
 
@@ -304,7 +306,9 @@ HTTP **200**. Příklad (čísla se liší):
     "history_max_age_seconds": 86400,
     "memory_protection": true,
     "api_docs_enabled": false,
-    "auth_enabled": true
+    "auth_enabled": true,
+    "default_password_active": false,
+    "locale": "CZ"
   },
   "uptime_seconds": 120.5,
   "sensor": {
@@ -504,17 +508,14 @@ Když proces neběží, `curl` selže spojení — to **není** HTTP 200.
 
 ## GET /
 
-HTML dashboard (`web/index.html`). Vyžaduje Basic Auth.
+HTML dashboard (`web/index.html`) včetně přihlašovacího formuláře. **Bez** Basic Auth, aby šel lokalizovat. Měření pořád chrání `/api/*`.
 
 ```bash
 curl -sS -o /dev/null -w '%{http_code}\n' \
-  -u admin:YOUR_PASSWORD \
   http://127.0.0.1:8080/
 ```
 
-Očekávaný kód: **200**.
-
-Bez hesla: **401**.
+Očekávaný kód: **200**. Jazyk stránky (`lang`, `data-locale`) bere z `web.locale` (`CZ` nebo `EN`). JSON klíče API se locale nemění.
 
 ---
 

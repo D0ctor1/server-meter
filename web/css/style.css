@@ -25,6 +25,11 @@ body { max-width: 1280px; margin: 0 auto; padding: 24px 20px 48px; }
   gap: 16px;
   margin-bottom: 24px;
 }
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
 .eyebrow { margin: 0; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; font-size: 12px; }
 h1 { margin: 4px 0 0; font-size: 32px; font-weight: 650; }
 .clock { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 20px; }
@@ -67,6 +72,73 @@ h1 { margin: 4px 0 0; font-size: 32px; font-weight: 650; }
   font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.info-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 2px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--muted);
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 700;
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: help;
+  flex: 0 0 auto;
+}
+.info-tip:hover, .info-tip:focus-visible, .info-tip.is-open {
+  color: var(--accent);
+  border-color: var(--accent);
+  outline: none;
+}
+.info-tip-bubble {
+  display: none;
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 8px);
+  left: 0;
+  width: min(280px, 72vw);
+  padding: 10px 12px;
+  background: #101826;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 400;
+  font-family: inherit;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.45;
+  box-shadow: var(--shadow);
+  white-space: normal;
+  text-align: left;
+  pointer-events: none;
+}
+.info-tip:hover .info-tip-bubble,
+.info-tip:focus-visible .info-tip-bubble,
+.info-tip.is-open .info-tip-bubble {
+  display: block;
+}
+@media (min-width: 981px) {
+  .cards .value-card:nth-child(4n) .info-tip-bubble,
+  .charts .chart-card:nth-child(2n) .info-tip-bubble {
+    left: auto;
+    right: 0;
+  }
 }
 .big { margin: 10px 0 6px; font-size: 28px; font-weight: 650; }
 .meta, .hint, footer { color: var(--muted); font-size: 13px; }
@@ -85,6 +157,67 @@ select {
   padding: 6px 8px;
 }
 .hint { margin: 0 0 14px; }
+.values-error { color: var(--crit); }
+
+.login-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 17, 24, 0.94);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 20px;
+}
+.login-overlay[hidden] { display: none !important; }
+.login-card {
+  width: min(420px, 100%);
+  background: linear-gradient(180deg, var(--panel), var(--panel-2));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.login-card h1 { margin: 0 0 4px; font-size: 26px; }
+.login-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.login-card input {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 15px;
+}
+.login-card button {
+  margin-top: 6px;
+  background: var(--accent);
+  color: #0c1118;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 15px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.login-error { color: var(--crit); margin: 0; font-size: 13px; }
+.logout {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+#app[hidden] { display: none !important; }
 .chart-card {
   display: flex;
   flex-direction: column;

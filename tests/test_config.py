@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from server_meter.config import AppConfig, ConfigError, load_config
+from server_meter.config import AppConfig, ConfigError, DEFAULT_LOCALE, load_config
 from tests.conftest import make_config
 
 
@@ -109,6 +109,39 @@ def test_memory_threshold_order():
     data["memory_protection"]["critical_percent"] = 80
     with pytest.raises(Exception):
         AppConfig.model_validate(data)
+
+
+def test_locale_defaults_to_cz_when_missing():
+    data = make_config().model_dump()
+    data["web"].pop("locale", None)
+    cfg = AppConfig.model_validate(data)
+    assert cfg.web.locale == "CZ"
+    assert cfg.web.locale == DEFAULT_LOCALE
+    assert cfg.public_status_dict()["locale"] == "CZ"
+
+
+def test_locale_cz_and_en_are_accepted():
+    for value, expected in (("CZ", "CZ"), ("EN", "EN"), ("cz", "CZ"), ("en", "EN")):
+        data = make_config().model_dump()
+        data["web"]["locale"] = value
+        cfg = AppConfig.model_validate(data)
+        assert cfg.web.locale == expected
+
+
+def test_locale_de_is_rejected_with_supported_list(tmp_path):
+    data = make_config().model_dump()
+    data["web"]["locale"] = "DE"
+    import yaml
+
+    path = tmp_path / "bad-locale.yaml"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    with pytest.raises(ConfigError) as excinfo:
+        load_config(path)
+    message = str(excinfo.value)
+    assert "Invalid locale 'DE'" in message
+    assert "Supported locales:" in message
+    assert "- CZ" in message
+    assert "- EN" in message
 
 
 def test_public_status_hides_password():

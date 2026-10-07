@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exception_handlers import http_exception_handler
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
@@ -17,6 +17,8 @@ from server_meter.api.auth import require_auth
 from server_meter.api.routes import build_router, json_error
 from server_meter.config import AppConfig
 from server_meter.service import MeterService
+
+WEB_ASSET_VERSION = f"{__version__}.ui2"
 
 
 def resolve_web_root() -> Path:
@@ -96,8 +98,18 @@ def create_app(config: AppConfig, service: MeterService | None = None) -> FastAP
             app.mount("/js", StaticFiles(directory=str(js)), name="js")
 
     @app.get("/", include_in_schema=False)
-    async def index(_user: str = Depends(auth_dep)) -> FileResponse:
-        return FileResponse(WEB_ROOT / "index.html")
+    async def index() -> HTMLResponse:
+        # HTML/JS/CSS are public so the login form can be localized.
+        # Measurement APIs remain behind HTTP Basic Auth.
+        template = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+        locale = config.web.locale
+        lang = "cs" if locale == "CZ" else "en"
+        html = (
+            template.replace("__LOCALE__", locale)
+            .replace("__LANG__", lang)
+            .replace("__ASSET__", WEB_ASSET_VERSION)
+        )
+        return HTMLResponse(content=html)
 
     if not config.web.health_public:
         # The public health route is already registered; replace it.

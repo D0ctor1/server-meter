@@ -61,6 +61,39 @@ sudo systemctl restart server-meter
 
 That is the only manual configuration step.
 
+## Localization
+
+server-meter supports:
+
+- CZ – Czech
+- EN – English
+
+Default:
+
+CZ
+
+Configuration:
+
+```yaml
+web:
+  locale: "CZ"
+```
+
+For English:
+
+```yaml
+web:
+  locale: "EN"
+```
+
+After a change:
+
+```bash
+sudo systemctl restart server-meter
+```
+
+If `web.locale` is omitted, the UI stays Czech. The installer never rewrites an existing locale. REST API JSON keys and `/api/nagios/check` are not translated.
+
 Upgrade (keeps the password and YAML):
 
 ```bash

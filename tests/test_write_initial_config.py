@@ -53,3 +53,55 @@ def test_write_then_preserve_password(tmp_path):
     assert "MySecret9" in updated
     assert "CHANGE_ME" not in updated
     assert "address: 0x77" in updated
+
+
+def test_preserve_does_not_overwrite_or_inject_locale(tmp_path):
+    dest = tmp_path / "config.yaml"
+    original = EXAMPLE.read_text(encoding="utf-8")
+    dest.write_text(
+        original.replace('locale: "CZ"', 'locale: "EN"').replace("CHANGE_ME", "KeepPass1")
+        if 'locale: "CZ"' in original
+        else original.replace("password: \"CHANGE_ME\"", 'password: "KeepPass1"').replace(
+            "web:\n", 'web:\n  locale: "EN"\n', 1
+        ),
+        encoding="utf-8",
+    )
+    subprocess.check_call(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--example",
+            str(EXAMPLE),
+            "--dest",
+            str(dest),
+            "--bus",
+            "1",
+            "--address",
+            "0x77",
+        ]
+    )
+    updated = dest.read_text(encoding="utf-8")
+    assert 'locale: "EN"' in updated
+    assert "KeepPass1" in updated
+    assert "CHANGE_ME" not in updated
+
+    missing = tmp_path / "legacy.yaml"
+    legacy = EXAMPLE.read_text(encoding="utf-8")
+    legacy = "\n".join(line for line in legacy.splitlines() if "locale:" not in line)
+    missing.write_text(legacy, encoding="utf-8")
+    subprocess.check_call(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--example",
+            str(EXAMPLE),
+            "--dest",
+            str(missing),
+            "--bus",
+            "1",
+            "--address",
+            "0x76",
+        ]
+    )
+    kept = missing.read_text(encoding="utf-8")
+    assert "locale:" not in kept

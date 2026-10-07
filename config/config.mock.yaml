@@ -6,6 +6,7 @@ application:
 web:
   host: "127.0.0.1"
   port: 8080
+  locale: "CZ"
   api_docs_enabled: true
   health_public: true
   auth:
