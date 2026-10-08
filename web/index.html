@@ -134,21 +134,25 @@
         <h1 id="settings-title" data-i18n="settings.title">Nastavení</h1>
         <button type="button" id="settings-close" class="icon-btn" data-i18n-aria="settings.close" aria-label="Zavřít">×</button>
       </header>
-      <p class="hint settings-disclaimer" data-i18n="settings.disclaimer">Výchozí hodnoty slouží k detekci výrazných odchylek a nejsou zdravotními limity.</p>
-      <nav class="settings-nav" aria-label="settings">
-        <button type="button" class="tab-btn is-active" data-tab="general" data-i18n="settings.tab.general">Obecné</button>
-        <button type="button" class="tab-btn" data-tab="users" data-i18n="settings.tab.users">Uživatelé</button>
-        <button type="button" class="tab-btn" data-tab="notifications" data-i18n="settings.tab.notifications">Notifikace</button>
-        <button type="button" class="tab-btn" data-tab="smtp" data-i18n="settings.tab.smtp">SMTP</button>
-        <button type="button" class="tab-btn" data-tab="thresholds" data-i18n="settings.tab.thresholds">Alarmy</button>
-        <button type="button" class="tab-btn" data-tab="system" data-i18n="settings.tab.system">Systém</button>
+      <nav class="settings-nav" role="tablist" data-i18n-aria="settings.nav" aria-label="Sekce nastavení">
+        <button type="button" class="tab-btn is-active" role="tab" id="settings-tab-general" data-tab="general" data-i18n="settings.tab.general" aria-controls="settings-panel-general" aria-selected="true">Obecné</button>
+        <button type="button" class="tab-btn" role="tab" id="settings-tab-users" data-tab="users" data-i18n="settings.tab.users" aria-controls="settings-panel-users" aria-selected="false">Uživatelé</button>
+        <button type="button" class="tab-btn" role="tab" id="settings-tab-notifications" data-tab="notifications" data-i18n="settings.tab.notifications" aria-controls="settings-panel-notifications" aria-selected="false">Notifikace</button>
+        <button type="button" class="tab-btn" role="tab" id="settings-tab-system" data-tab="system" data-i18n="settings.tab.system" aria-controls="settings-panel-system" aria-selected="false">Systém</button>
+        <button type="button" class="tab-btn" role="tab" id="settings-tab-smtp" data-tab="smtp" data-i18n="settings.tab.smtp" aria-controls="settings-panel-smtp" aria-selected="false">SMTP</button>
+        <button type="button" class="tab-btn" role="tab" id="settings-tab-alarms" data-tab="alarms" data-i18n="settings.tab.alarms" aria-controls="settings-panel-alarms" aria-selected="false">Alarmy</button>
       </nav>
-      <section class="settings-section settings-tab" data-tab-panel="general">
+      <p id="settings-status" class="settings-status" role="status" hidden></p>
+
+      <section class="settings-section settings-tab" id="settings-panel-general" role="tabpanel" data-tab-panel="general" aria-labelledby="settings-tab-general">
         <h2 data-i18n="settings.tab.general">Obecné</h2>
         <p class="hint" data-i18n="settings.general_hint">Jazyk webu se nastavuje v YAML (web.locale). Účty jsou v SQLite, historie měření zůstává jen v RAM.</p>
+        <p class="meta" data-i18n="settings.readonly">Pouze ke čtení</p>
         <p id="settings-general-info" class="meta"></p>
+        <dl id="settings-general-dl" class="diag-list"></dl>
       </section>
-      <section class="settings-section settings-tab" data-tab-panel="users" hidden>
+
+      <section class="settings-section settings-tab" id="settings-panel-users" role="tabpanel" data-tab-panel="users" aria-labelledby="settings-tab-users" hidden>
         <h2 data-i18n="settings.users">Uživatelé</h2>
         <div class="users-toolbar">
           <button type="button" id="user-add" class="secondary-btn" data-i18n="users.add">+ Přidat uživatele</button>
@@ -168,8 +172,9 @@
           </table>
         </div>
       </section>
+
       <form id="settings-form">
-        <section class="settings-section settings-tab" data-tab-panel="notifications" hidden>
+        <section class="settings-section settings-tab" id="settings-panel-notifications" role="tabpanel" data-tab-panel="notifications" aria-labelledby="settings-tab-notifications" hidden>
           <h2 data-i18n="settings.notifications">Notifikace</h2>
           <label class="check-row">
             <input id="notify-enabled" type="checkbox">
@@ -187,9 +192,20 @@
             <span data-i18n="settings.cooldown">Cooldown mezi e-maily (s)</span>
             <input id="notify-cooldown" type="number" min="60" max="86400" step="1">
           </label>
+          <label>
+            <span data-i18n="settings.smtp_to">Příjemce</span>
+            <input id="smtp-to" type="text" autocomplete="off" data-i18n-placeholder="settings.smtp_to_hint">
+          </label>
+          <label>
+            <span data-i18n="settings.web_url">URL server-meter</span>
+            <input id="smtp-web-url" type="url" autocomplete="off">
+          </label>
+          <div class="settings-actions">
+            <button type="submit" data-i18n="settings.save">Uložit</button>
+          </div>
         </section>
 
-        <section class="settings-section settings-tab" data-tab-panel="smtp" hidden>
+        <section class="settings-section settings-tab" id="settings-panel-smtp" role="tabpanel" data-tab-panel="smtp" aria-labelledby="settings-tab-smtp" hidden>
           <h2 data-i18n="settings.smtp">SMTP</h2>
           <label>
             <span data-i18n="settings.smtp_host">SMTP server</span>
@@ -219,18 +235,15 @@
             <span data-i18n="settings.smtp_from">Odesílatel</span>
             <input id="smtp-from" type="email" autocomplete="off">
           </label>
-          <label>
-            <span data-i18n="settings.smtp_to">Příjemce</span>
-            <input id="smtp-to" type="text" autocomplete="off" data-i18n-placeholder="settings.smtp_to_hint">
-          </label>
-          <label>
-            <span data-i18n="settings.web_url">URL server-meter</span>
-            <input id="smtp-web-url" type="url" autocomplete="off">
-          </label>
+          <div class="settings-actions">
+            <button type="button" id="settings-test" class="secondary-btn" data-i18n="settings.test_email">Odeslat testovací email</button>
+            <button type="submit" data-i18n="settings.save_smtp">Uložit SMTP</button>
+          </div>
         </section>
 
-        <section class="settings-section settings-tab" data-tab-panel="thresholds" hidden>
+        <section class="settings-section settings-tab" id="settings-panel-alarms" role="tabpanel" data-tab-panel="alarms" aria-labelledby="settings-tab-alarms" hidden>
           <h2 data-i18n="settings.thresholds">Prahové hodnoty</h2>
+          <p class="hint settings-disclaimer" data-i18n="settings.disclaimer">Výchozí hodnoty slouží k detekci výrazných odchylek a nejsou zdravotními limity.</p>
           <p class="hint" data-i18n="settings.air_note">IAQ, eCO₂ a bVOC jsou indikátory kvality vzduchu z BME690/BSEC, nikoliv certifikované měření škodlivin.</p>
           <div class="threshold-wrap">
             <table class="threshold-table">
@@ -249,22 +262,21 @@
               <tbody id="threshold-body"></tbody>
             </table>
           </div>
+          <div class="settings-actions">
+            <button type="submit" data-i18n="settings.save">Uložit</button>
+          </div>
         </section>
-
-        <p id="settings-status" class="settings-status" role="status" hidden></p>
-        <div class="settings-actions" id="settings-form-actions">
-          <button type="button" id="settings-test" class="secondary-btn" data-i18n="settings.test_email">Odeslat testovací email</button>
-          <button type="submit" id="settings-save" data-i18n="settings.save">Uložit</button>
-        </div>
       </form>
-      <section class="settings-section settings-tab" data-tab-panel="system" hidden>
+
+      <section class="settings-section settings-tab" id="settings-panel-system" role="tabpanel" data-tab-panel="system" aria-labelledby="settings-tab-system" hidden>
         <h2 data-i18n="settings.tab.system">Systém</h2>
+        <p class="meta" data-i18n="settings.readonly">Pouze ke čtení</p>
         <p id="settings-system-info" class="hint"></p>
         <dl id="settings-system-dl" class="diag-list"></dl>
         <h2 data-i18n="settings.diagnostics">Diagnostika</h2>
         <dl id="settings-diag-dl" class="diag-list"></dl>
         <h2 data-i18n="settings.token">Nagios monitoring token</h2>
-        <p class="hint" data-i18n="settings.token_hint">Volitelný token jen pro GET /api/monitoring. Stávající Basic Auth Nagios plugin zůstává.</p>
+        <p class="hint" data-i18n="settings.token_hint">Volitelný token jen pro GET /api/monitoring. Stávající Basic Auth plugin zůstává.</p>
         <p id="settings-token-status" class="meta"></p>
         <p id="settings-token-once" class="hint" hidden></p>
         <div class="settings-actions">

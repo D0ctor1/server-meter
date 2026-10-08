@@ -80,6 +80,9 @@ def test_cz_and_en_dictionaries_have_the_same_keys():
         "history.empty",
         "settings.export",
         "settings.token",
+        "settings.tab.alarms",
+        "settings.readonly",
+        "settings.save_smtp",
     ):
         assert required in cz
 
@@ -221,6 +224,8 @@ def test_served_html_defaults_to_cz():
         assert "__ASSET__" not in response.text
         assert "/js/i18n.js?v=" in response.text
         assert "/js/settings.js?v=" in response.text
+        assert client.get("/settings").status_code == 200
+        assert 'data-tab="alarms"' in client.get("/settings").text
 
 
 def test_served_html_uses_en_when_configured():

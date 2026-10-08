@@ -3,6 +3,50 @@
   const i18n = window.ServerMeterI18n;
   const t = (key, params) => i18n.t(key, params);
 
+  const SETTINGS_SECTIONS = {
+    general: {
+      id: "general",
+      labelKey: "settings.tab.general",
+      requiredRole: "admin",
+      content: "[data-tab-panel='general']",
+    },
+    users: {
+      id: "users",
+      labelKey: "settings.tab.users",
+      requiredRole: "admin",
+      content: "[data-tab-panel='users']",
+    },
+    notifications: {
+      id: "notifications",
+      labelKey: "settings.tab.notifications",
+      requiredRole: "admin",
+      content: "[data-tab-panel='notifications']",
+    },
+    system: {
+      id: "system",
+      labelKey: "settings.tab.system",
+      requiredRole: "admin",
+      content: "[data-tab-panel='system']",
+    },
+    smtp: {
+      id: "smtp",
+      labelKey: "settings.tab.smtp",
+      requiredRole: "admin",
+      content: "[data-tab-panel='smtp']",
+    },
+    alarms: {
+      id: "alarms",
+      labelKey: "settings.tab.alarms",
+      requiredRole: "admin",
+      content: "[data-tab-panel='alarms']",
+    },
+  };
+
+  const HASH_ALIASES = { thresholds: "alarms" };
+  const DEFAULT_SECTION = "general";
+  const SETTINGS_PATH = "/settings";
+  const FORM_SECTIONS = { notifications: true, smtp: true, alarms: true };
+
   const METRIC_ORDER = [
     "temperature",
     "humidity",
@@ -21,6 +65,11 @@
 
   const $ = (id) => document.getElementById(id);
   let loaded = null;
+  let settingsFetch = null;
+  let currentRole = "user";
+  let currentSection = DEFAULT_SECTION;
+  let syncingHash = false;
+  let overlayOpen = false;
 
   function authHeader() {
     const token = sessionStorage.getItem(AUTH_STORAGE_KEY);
@@ -66,6 +115,39 @@
     return Number.isNaN(number) ? null : number;
   }
 
+  function fmtMem(bytes) {
+    if (bytes === null || bytes === undefined || Number.isNaN(Number(bytes))) return "—";
+    const n = Number(bytes);
+    if (n < 1024) return `${Math.round(n)} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`;
+    return `${(n / (1024 * 1024)).toFixed(1)} MiB`;
+  }
+
+  function canonicalSection(raw) {
+    const id = String(raw || "").replace(/^#/, "").trim().toLowerCase();
+    const mapped = HASH_ALIASES[id] || id;
+    return Object.prototype.hasOwnProperty.call(SETTINGS_SECTIONS, mapped)
+      ? mapped
+      : DEFAULT_SECTION;
+  }
+
+  function hashSection() {
+    return canonicalSection(typeof location !== "undefined" ? location.hash : "");
+  }
+
+  function currentPathname() {
+    const path = typeof location !== "undefined" ? location.pathname : "/";
+    return path.replace(/\/+$/, "") || "/";
+  }
+
+  function wantsSettingsFromUrl() {
+    if (currentPathname() === SETTINGS_PATH) return true;
+    const raw = String(typeof location !== "undefined" ? location.hash : "").replace(/^#/, "");
+    if (!raw) return false;
+    const mapped = HASH_ALIASES[raw.toLowerCase()] || raw.toLowerCase();
+    return Object.prototype.hasOwnProperty.call(SETTINGS_SECTIONS, mapped);
+  }
+
   function setStatus(message, kind) {
     const node = $("settings-status");
     if (!node) return;
@@ -88,6 +170,7 @@
 
   function renderThresholds(thresholds) {
     const body = $("threshold-body");
+    if (!body) return;
     body.innerHTML = "";
     const names = METRIC_ORDER.filter((name) => thresholds[name]).concat(
       Object.keys(thresholds).filter((name) => METRIC_ORDER.indexOf(name) < 0),
@@ -113,7 +196,9 @@
 
   function readThresholds() {
     const thresholds = {};
-    $("threshold-body").querySelectorAll("tr").forEach((row) => {
+    const body = $("threshold-body");
+    if (!body) return thresholds;
+    body.querySelectorAll("tr").forEach((row) => {
       const name = row.dataset.metric;
       const get = (field) => row.querySelector(`[data-field="${field}"]`);
       thresholds[name] = {
@@ -131,50 +216,48 @@
 
   function fillForm(data) {
     loaded = data;
-    $("notify-enabled").checked = !!data.enabled;
-    $("notify-email-enabled").checked = !!(data.email && data.email.enabled);
-    $("notify-recovery").checked = !!(data.email && data.email.notify_recovery);
-    $("notify-cooldown").value = data.email ? data.email.cooldown_seconds : 3600;
+    if ($("notify-enabled")) $("notify-enabled").checked = !!data.enabled;
+    if ($("notify-email-enabled")) $("notify-email-enabled").checked = !!(data.email && data.email.enabled);
+    if ($("notify-recovery")) $("notify-recovery").checked = !!(data.email && data.email.notify_recovery);
+    if ($("notify-cooldown")) $("notify-cooldown").value = data.email ? data.email.cooldown_seconds : 3600;
     const smtp = (data.email && data.email.smtp) || {};
-    $("smtp-host").value = smtp.host || "";
-    $("smtp-port").value = smtp.port || 587;
-    $("smtp-security").value = smtp.security || "starttls";
-    $("smtp-username").value = smtp.username || "";
-    $("smtp-password").value = "";
-    $("smtp-from").value = (data.email && data.email.from) || "";
-    $("smtp-to").value = ((data.email && data.email.to) || []).join(", ");
-    $("smtp-web-url").value = (data.email && data.email.web_url) || "";
+    if ($("smtp-host")) $("smtp-host").value = smtp.host || "";
+    if ($("smtp-port")) $("smtp-port").value = smtp.port || 587;
+    if ($("smtp-security")) $("smtp-security").value = smtp.security || "starttls";
+    if ($("smtp-username")) $("smtp-username").value = smtp.username || "";
+    if ($("smtp-password")) $("smtp-password").value = "";
+    if ($("smtp-from")) $("smtp-from").value = (data.email && data.email.from) || "";
+    if ($("smtp-to")) $("smtp-to").value = ((data.email && data.email.to) || []).join(", ");
+    if ($("smtp-web-url")) $("smtp-web-url").value = (data.email && data.email.web_url) || "";
     renderThresholds(data.thresholds || {});
     if (data.delivery_error) {
       setStatus(t("settings.delivery_error", { error: data.delivery_error }), "state-warn");
     } else if (data.writable === false) {
       setStatus(t("settings.not_writable"), "state-warn");
-    } else {
-      setStatus("", "");
     }
   }
 
   function payloadFromForm() {
-    const password = $("smtp-password").value;
+    const password = $("smtp-password") ? $("smtp-password").value : "";
     const smtp = {
-      host: $("smtp-host").value.trim(),
-      port: parseNum($("smtp-port").value),
-      security: $("smtp-security").value,
-      username: $("smtp-username").value.trim(),
+      host: $("smtp-host") ? $("smtp-host").value.trim() : "",
+      port: $("smtp-port") ? parseNum($("smtp-port").value) : null,
+      security: $("smtp-security") ? $("smtp-security").value : "starttls",
+      username: $("smtp-username") ? $("smtp-username").value.trim() : "",
       timeout_seconds: loaded && loaded.email && loaded.email.smtp
         ? loaded.email.smtp.timeout_seconds
         : 15,
     };
     if (password) smtp.password = password;
     return {
-      enabled: $("notify-enabled").checked,
+      enabled: $("notify-enabled") ? $("notify-enabled").checked : false,
       email: {
-        enabled: $("notify-email-enabled").checked,
-        notify_recovery: $("notify-recovery").checked,
-        cooldown_seconds: parseNum($("notify-cooldown").value),
-        from: $("smtp-from").value.trim(),
-        to: $("smtp-to").value,
-        web_url: $("smtp-web-url").value.trim(),
+        enabled: $("notify-email-enabled") ? $("notify-email-enabled").checked : false,
+        notify_recovery: $("notify-recovery") ? $("notify-recovery").checked : false,
+        cooldown_seconds: $("notify-cooldown") ? parseNum($("notify-cooldown").value) : 3600,
+        from: $("smtp-from") ? $("smtp-from").value.trim() : "",
+        to: $("smtp-to") ? $("smtp-to").value : "",
+        web_url: $("smtp-web-url") ? $("smtp-web-url").value.trim() : "",
         smtp,
       },
       thresholds: readThresholds(),
@@ -183,20 +266,86 @@
 
   let editingUserId = null;
   let deletingUser = null;
-  let currentRole = "user";
 
-  function showTab(name) {
+  function applyVisibility(name) {
+    const section = canonicalSection(name);
+    currentSection = section;
     document.querySelectorAll(".tab-btn").forEach((btn) => {
-      btn.classList.toggle("is-active", btn.dataset.tab === name);
+      const active = btn.dataset.tab === section;
+      btn.classList.toggle("is-active", active);
+      btn.setAttribute("aria-selected", active ? "true" : "false");
     });
     document.querySelectorAll("[data-tab-panel]").forEach((panel) => {
-      panel.hidden = panel.dataset.tabPanel !== name;
+      const active = panel.dataset.tabPanel === section;
+      panel.hidden = !active;
+      panel.setAttribute("aria-hidden", active ? "false" : "true");
     });
-    const formActions = $("settings-form-actions");
-    if (formActions) {
-      formActions.hidden = name !== "notifications" && name !== "smtp" && name !== "thresholds";
+    if (section !== "users") {
+      closeUserForm();
+      closeDeleteUser();
     }
-    if (name === "users") loadUsers();
+    return section;
+  }
+
+  function syncHash(section, replace) {
+    const next = `#${section}`;
+    const path = overlayOpen ? SETTINGS_PATH : currentPathname();
+    const target = `${path}${next}`;
+    const current = `${currentPathname()}${typeof location !== "undefined" ? location.hash : ""}`;
+    if (current === target) return;
+    syncingHash = true;
+    try {
+      if (replace && window.history && window.history.replaceState) {
+        window.history.replaceState(null, "", target);
+      } else if (window.history && window.history.pushState) {
+        window.history.pushState(null, "", target);
+      } else if (typeof location !== "undefined") {
+        location.hash = next;
+      }
+    } finally {
+      syncingHash = false;
+    }
+  }
+
+  async function loadSectionData(section) {
+    if (section === "general") {
+      await fillGeneral();
+      return;
+    }
+    if (section === "users") {
+      await loadUsers();
+      return;
+    }
+    if (section === "system") {
+      await fillSystemDetails();
+      return;
+    }
+    if (FORM_SECTIONS[section]) {
+      await ensureSettingsLoaded();
+    }
+  }
+
+  async function showTab(name, options) {
+    const opts = options || {};
+    const section = applyVisibility(name);
+    if (!opts.skipHash) syncHash(section, !!opts.replaceHash);
+    if (opts.skipLoad) return section;
+    await loadSectionData(section);
+    return section;
+  }
+
+  async function ensureSettingsLoaded() {
+    if (loaded) return loaded;
+    if (settingsFetch) return settingsFetch;
+    settingsFetch = requestJson("/api/settings", { method: "GET" })
+      .then((data) => {
+        fillForm(data);
+        return data;
+      })
+      .finally(() => {
+        settingsFetch = null;
+      });
+    return settingsFetch;
   }
 
   function roleLabel(role) {
@@ -269,6 +418,7 @@
   }
 
   function openUserForm(user) {
+    if (currentSection !== "users") return;
     editingUserId = user && user.id ? user.id : null;
     $("user-form-title").textContent = editingUserId ? t("users.edit_title") : t("users.add_title");
     $("user-id").value = editingUserId || "";
@@ -285,13 +435,15 @@
   }
 
   function closeUserForm() {
-    $("user-overlay").hidden = true;
-    $("user-password").value = "";
-    $("user-password-confirm").value = "";
+    const overlay = $("user-overlay");
+    if (overlay) overlay.hidden = true;
+    if ($("user-password")) $("user-password").value = "";
+    if ($("user-password-confirm")) $("user-password-confirm").value = "";
     editingUserId = null;
   }
 
   function openDeleteUser(user) {
+    if (currentSection !== "users") return;
     deletingUser = user;
     $("user-delete-name").textContent = user.username;
     $("user-delete-overlay").hidden = false;
@@ -300,7 +452,8 @@
   }
 
   function closeDeleteUser() {
-    $("user-delete-overlay").hidden = true;
+    const overlay = $("user-delete-overlay");
+    if (overlay) overlay.hidden = true;
     deletingUser = null;
   }
 
@@ -340,6 +493,7 @@
       closeUserForm();
       await loadUsers();
       setStatus(t("users.saved"), "state-ok");
+      syncHash("users", true);
     } catch (err) {
       setUserFormError(userErrorMessage(err));
     }
@@ -352,39 +506,10 @@
       closeDeleteUser();
       await loadUsers();
       setStatus(t("users.deleted"), "state-ok");
+      syncHash("users", true);
     } catch (err) {
       closeDeleteUser();
       setStatus(userErrorMessage(err), "state-crit");
-    }
-  }
-
-  async function openSettings() {
-    if (currentRole !== "admin") return;
-    const overlay = $("settings-overlay");
-    overlay.hidden = false;
-    i18n.apply(overlay);
-    showTab("general");
-    try {
-      const [data, status] = await Promise.all([
-        requestJson("/api/settings", { method: "GET" }),
-        requestJson("/api/status", { method: "GET" }),
-      ]);
-      fillForm(data);
-      const locale = status.application && status.application.locale ? status.application.locale : "CZ";
-      $("settings-general-info").textContent = t("settings.general_info", {
-        locale,
-        env: status.application.environment || "",
-      });
-      $("settings-system-info").textContent = t("settings.system_info", {
-        ram: status.memory && status.memory.ram_usage_percent != null
-          ? Number(status.memory.ram_usage_percent).toFixed(0)
-          : "—",
-        samples: status.history ? status.history.samples : 0,
-        sensor: status.sensor ? status.sensor.status : "—",
-      });
-      await fillSystemDetails();
-    } catch (err) {
-      setStatus(err.message, "state-crit");
     }
   }
 
@@ -401,6 +526,38 @@
     }
   }
 
+  function onOff(value) {
+    return value ? t("settings.enabled_on") : t("settings.enabled_off");
+  }
+
+  async function fillGeneral() {
+    try {
+      const status = await requestJson("/api/status", { method: "GET" });
+      const app = status.application || {};
+      const history = status.history || {};
+      const locale = app.locale || "CZ";
+      if ($("settings-general-info")) {
+        $("settings-general-info").textContent = t("settings.general_info", {
+          locale,
+          env: app.environment || "",
+        });
+      }
+      fillDl("settings-general-dl", [
+        [t("settings.general.locale"), locale],
+        [t("settings.general.environment"), app.environment || "—"],
+        [t("settings.general.sensor_type"), app.sensor_type || "BME690"],
+        [t("settings.general.interval"), app.interval_seconds != null ? `${app.interval_seconds} s` : "—"],
+        [t("settings.general.max_samples"), history.max_samples != null ? history.max_samples : app.history_max_samples],
+        [t("settings.general.max_age"), i18n.formatDuration(
+          history.max_age_seconds != null ? history.max_age_seconds : app.history_max_age_seconds,
+        )],
+        [t("settings.general.ram_protection"), onOff(!!app.memory_protection)],
+      ]);
+    } catch (err) {
+      setStatus(err.message, "state-crit");
+    }
+  }
+
   async function fillSystemDetails() {
     try {
       const [info, token, status, current] = await Promise.all([
@@ -409,6 +566,15 @@
         requestJson("/api/status", { method: "GET" }),
         requestJson("/api/current", { method: "GET" }),
       ]);
+      if ($("settings-system-info")) {
+        $("settings-system-info").textContent = t("settings.system_info", {
+          ram: status.memory && status.memory.ram_usage_percent != null
+            ? Number(status.memory.ram_usage_percent).toFixed(0)
+            : "—",
+          samples: status.history ? status.history.samples : 0,
+          sensor: status.sensor ? status.sensor.status : "—",
+        });
+      }
       fillDl("settings-system-dl", [
         [t("diag.app_version"), info.application_version],
         [t("diag.python"), info.python_version],
@@ -419,18 +585,24 @@
         [t("diag.cpu_temp"), info.cpu_temperature_c == null ? "—" : `${Number(info.cpu_temperature_c).toFixed(1)} °C`],
         [t("diag.ram"), info.ram_usage_percent == null ? "—" : `${Number(info.ram_usage_percent).toFixed(0)} %`],
       ]);
-      const i2c = status.system_health && status.system_health.items && status.system_health.items.i2c
-        ? status.system_health.items.i2c
-        : {};
-      const bsec = status.system_health && status.system_health.items && status.system_health.items.bsec
-        ? status.system_health.items.bsec
-        : {};
+      const health = status.system_health && status.system_health.items ? status.system_health.items : {};
+      const i2c = health.i2c || {};
+      const bsec = health.bsec || {};
+      const bme = health.bme690 || {};
+      const ramProt = health.ram_protection || {};
       fillDl("settings-diag-dl", [
         [t("diag.i2c_bus"), info.i2c_bus || i2c.bus],
         [t("diag.address"), info.bme690_address || i2c.address],
         [t("diag.i2c_status"), i2c.status || "—"],
+        [t("diag.bme690_status"), bme.status || "—"],
         [t("diag.bsec_version"), info.bsec_version || "—"],
         [t("diag.bsec_status"), bsec.status || "—"],
+        [t("diag.sensor_age"), status.sensor && status.sensor.age_seconds != null
+          ? i18n.formatDuration(status.sensor.age_seconds)
+          : "—"],
+        [t("diag.history_samples"), status.history ? status.history.samples : "—"],
+        [t("diag.ram_history"), status.history ? fmtMem(status.history.memory_bytes) : "—"],
+        [t("diag.ram_protection_status"), ramProt.status || ramProt.pressure || "—"],
         [t("diag.iaq_accuracy"), current && current.iaq_accuracy != null ? String(current.iaq_accuracy) : "—"],
         [t("diag.static_iaq_accuracy"), current && current.static_iaq_accuracy != null ? String(current.static_iaq_accuracy) : "—"],
       ]);
@@ -489,30 +661,59 @@
     }
   }
 
+  async function openSettings(preferred) {
+    if (currentRole !== "admin") return false;
+    const login = $("login-overlay");
+    if (login && !login.hidden) return false;
+    const overlay = $("settings-overlay");
+    if (!overlay) return false;
+    overlayOpen = true;
+    overlay.hidden = false;
+    i18n.apply(overlay);
+    const section = canonicalSection(preferred || hashSection());
+    await showTab(section, { replaceHash: currentPathname() === SETTINGS_PATH });
+    return true;
+  }
+
   function closeSettings() {
-    $("settings-overlay").hidden = true;
-    $("smtp-password").value = "";
+    overlayOpen = false;
+    loaded = null;
+    settingsFetch = null;
+    const overlay = $("settings-overlay");
+    if (overlay) overlay.hidden = true;
+    if ($("smtp-password")) $("smtp-password").value = "";
     closeUserForm();
     closeDeleteUser();
+    if (currentPathname() === SETTINGS_PATH && window.history && window.history.pushState) {
+      syncingHash = true;
+      try {
+        window.history.pushState(null, "", "/");
+      } finally {
+        syncingHash = false;
+      }
+    }
   }
 
   async function onSave(event) {
     event.preventDefault();
     try {
+      await ensureSettingsLoaded();
       const data = await requestJson("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payloadFromForm()),
       });
       fillForm(data);
-      $("smtp-password").value = "";
+      if ($("smtp-password")) $("smtp-password").value = "";
       setStatus(t("settings.saved"), "state-ok");
+      syncHash(currentSection, true);
     } catch (err) {
       setStatus(t("settings.save_failed", { error: err.message }), "state-crit");
     }
   }
 
   async function onTest() {
+    if (currentSection !== "smtp") return;
     try {
       const result = await requestJson("/api/settings/test-email", { method: "POST" });
       if (result && result.ok) {
@@ -525,10 +726,30 @@
     }
   }
 
+  async function onLocationChange() {
+    if (syncingHash) return;
+    if (currentRole !== "admin") return;
+    if (wantsSettingsFromUrl()) {
+      await openSettings(hashSection());
+      return;
+    }
+    if (overlayOpen && currentPathname() !== SETTINGS_PATH) {
+      overlayOpen = false;
+      loaded = null;
+      const overlay = $("settings-overlay");
+      if (overlay) overlay.hidden = true;
+      closeUserForm();
+      closeDeleteUser();
+    }
+  }
+
   function boot() {
     const button = $("settings-button");
     if (!button) return;
-    button.addEventListener("click", openSettings);
+    button.addEventListener("click", () => {
+      const preferred = wantsSettingsFromUrl() ? hashSection() : DEFAULT_SECTION;
+      openSettings(preferred);
+    });
     $("settings-close").addEventListener("click", closeSettings);
     $("settings-form").addEventListener("submit", onSave);
     $("settings-test").addEventListener("click", onTest);
@@ -555,24 +776,51 @@
     });
     document.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") return;
-      if (!$("user-delete-overlay").hidden) {
+      if ($("user-delete-overlay") && !$("user-delete-overlay").hidden) {
         closeDeleteUser();
         return;
       }
-      if (!$("user-overlay").hidden) {
+      if ($("user-overlay") && !$("user-overlay").hidden) {
         closeUserForm();
         return;
       }
-      if (!$("settings-overlay").hidden) closeSettings();
+      if ($("settings-overlay") && !$("settings-overlay").hidden) closeSettings();
     });
-    window.ServerMeterSettings = {
-      setRole(role) {
-        currentRole = role === "admin" ? "admin" : "user";
-        button.hidden = currentRole !== "admin";
-        if (currentRole !== "admin") closeSettings();
-      },
-    };
+    window.addEventListener("hashchange", onLocationChange);
+    window.addEventListener("popstate", onLocationChange);
   }
+
+  function setRole(role) {
+    currentRole = role === "admin" ? "admin" : "user";
+    const button = $("settings-button");
+    if (button) button.hidden = currentRole !== "admin";
+    if (currentRole !== "admin") {
+      if (overlayOpen) closeSettings();
+      return false;
+    }
+    if (wantsSettingsFromUrl()) return openSettings(hashSection());
+    return false;
+  }
+
+  window.ServerMeterSettings = {
+    SETTINGS_SECTIONS,
+    HASH_ALIASES,
+    DEFAULT_SECTION,
+    canonicalSection,
+    hashSection,
+    wantsSettingsFromUrl,
+    applyVisibility,
+    showTab,
+    openSettings,
+    closeSettings,
+    setRole,
+    currentSection() {
+      return currentSection;
+    },
+    isOpen() {
+      return overlayOpen;
+    },
+  };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot);
