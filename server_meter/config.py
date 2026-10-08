@@ -22,14 +22,15 @@ logger = logging.getLogger("server_meter.config")
 HISTORY_HARD_MAX_SAMPLES = 2_000_000
 HISTORY_DEFAULT_MAX_SAMPLES = 2_000_000
 HISTORY_MIN_SAMPLES = 1
-# 2_000_000 samples at the 5 s sensor interval need ~116 days of age.
-HISTORY_MAX_AGE_SECONDS = 180 * 24 * 3600
-HISTORY_DEFAULT_MAX_AGE_SECONDS = 86_400
+# Explicit age cap cannot exceed the longest possible auto span
+# (2_000_000 samples × 3600 s sensor interval).
+HISTORY_MAX_AGE_SECONDS = HISTORY_HARD_MAX_SAMPLES * 3600
 # HTTP /api/history never dumps the whole ring to the client by default.
 HISTORY_API_DEFAULT_LIMIT = 2_000
 HISTORY_API_MAX_LIMIT = 10_000
-# Old example.yaml / docs defaults. Upgrade rewrites only these two values.
+# Old example.yaml / docs defaults. Upgrade rewrites only these values.
 LEGACY_HISTORY_MAX_SAMPLES = frozenset({10_000, 20_000})
+LEGACY_HISTORY_MAX_AGE_SECONDS = frozenset({86_400})
 DEFAULT_PASSWORD_PLACEHOLDER = "CHANGE_ME"
 VALID_I2C_ADDRESSES = {0x76, 0x77}
 SUPPORTED_LOCALES = ("CZ", "EN")
@@ -140,6 +141,11 @@ class SensorConfig(BaseModel):
     i2c_timeout_seconds: float = Field(default=1.0, ge=0.1, le=10.0)
 
 
+def theoretical_history_age_seconds(max_samples: int, interval_seconds: float) -> float:
+    """Calendar span the ring can hold at a steady sampling interval."""
+    return float(max_samples) * float(interval_seconds)
+
+
 class HistoryConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -148,12 +154,37 @@ class HistoryConfig(BaseModel):
         ge=HISTORY_MIN_SAMPLES,
         le=HISTORY_HARD_MAX_SAMPLES,
     )
-    max_age_seconds: int = Field(
-        default=HISTORY_DEFAULT_MAX_AGE_SECONDS,
-        ge=60,
-        le=HISTORY_MAX_AGE_SECONDS,
-    )
+    # None / "auto" → max_samples × sensor.interval_seconds. Not 86400.
+    max_age_seconds: int | None = Field(default=None)
     min_samples_keep: int = Field(default=64, ge=1, le=1000)
+
+    @field_validator("max_age_seconds", mode="before")
+    @classmethod
+    def parse_max_age_seconds(cls, value: Any) -> int | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            text = value.strip().lower()
+            if text in {"", "auto"}:
+                return None
+            value = int(float(text)) if "." in text else int(text)
+        if isinstance(value, bool):
+            raise ValueError("history.max_age_seconds must be auto or a positive integer")
+        if isinstance(value, float):
+            if not value.is_integer():
+                raise ValueError("history.max_age_seconds must be an integer or auto")
+            value = int(value)
+        if not isinstance(value, int):
+            raise ValueError("history.max_age_seconds must be auto or a positive integer")
+        if value <= 0:
+            return None
+        if value < 60:
+            raise ValueError("history.max_age_seconds must be >= 60 when set explicitly")
+        if value > HISTORY_MAX_AGE_SECONDS:
+            raise ValueError(
+                f"history.max_age_seconds must be <= {HISTORY_MAX_AGE_SECONDS} when set explicitly"
+            )
+        return value
 
     @model_validator(mode="after")
     def cap_keep_below_max(self) -> HistoryConfig:
@@ -446,6 +477,17 @@ class AppConfig(BaseModel):
     def is_production(self) -> bool:
         return self.application.environment == "production"
 
+    def theoretical_history_max_age_seconds(self) -> float:
+        return theoretical_history_age_seconds(
+            self.history.max_samples,
+            self.sensor.interval_seconds,
+        )
+
+    def resolved_history_max_age_seconds(self) -> float:
+        if self.history.max_age_seconds is None:
+            return self.theoretical_history_max_age_seconds()
+        return float(self.history.max_age_seconds)
+
     def public_status_dict(self) -> dict[str, Any]:
         """Subset of config that is safe to expose (no secrets)."""
         return {
@@ -458,7 +500,8 @@ class AppConfig(BaseModel):
             "interval_seconds": self.sensor.interval_seconds,
             "bsec_enabled": self.sensor.bsec.enabled and self.sensor.driver != "mock",
             "history_max_samples": self.history.max_samples,
-            "history_max_age_seconds": self.history.max_age_seconds,
+            "history_max_age_seconds": self.resolved_history_max_age_seconds(),
+            "history_max_age_auto": self.history.max_age_seconds is None,
             "memory_protection": self.memory_protection.enabled,
             "api_docs_enabled": self.web.api_docs_enabled,
             "auth_enabled": self.web.auth.enabled,
@@ -485,6 +528,10 @@ def _default_config_paths() -> list[Path]:
     return candidates
 
 
+def _history_yaml_block(text: str) -> re.Match[str] | None:
+    return re.search(r"(?ms)^history:.*?(?=^[A-Za-z_]|\Z)", text)
+
+
 def bump_legacy_history_max_samples(
     text: str,
     new_value: int = HISTORY_DEFAULT_MAX_SAMPLES,
@@ -494,7 +541,7 @@ def bump_legacy_history_max_samples(
     Leaves passwords, SMTP, locale, alarms, and any intentional smaller/larger
     cap (for example 100000) untouched. Returns (text, number_of_replacements).
     """
-    history_match = re.search(r"(?ms)^history:.*?(?=^[A-Za-z_]|\Z)", text)
+    history_match = _history_yaml_block(text)
     if not history_match:
         return text, 0
     alternatives = "|".join(str(value) for value in sorted(LEGACY_HISTORY_MAX_SAMPLES))
@@ -510,8 +557,34 @@ def bump_legacy_history_max_samples(
     return text[: history_match.start()] + new_block + text[history_match.end() :], count
 
 
+def bump_legacy_history_max_age(text: str) -> tuple[str, int]:
+    """Rewrite history.max_age_seconds 86400 (old example default) to auto."""
+    history_match = _history_yaml_block(text)
+    if not history_match:
+        return text, 0
+    alternatives = "|".join(
+        rf"{value}(?:\.0+)?" for value in sorted(LEGACY_HISTORY_MAX_AGE_SECONDS)
+    )
+    block = history_match.group(0)
+    new_block, count = re.subn(
+        rf"(?m)^(\s*max_age_seconds:\s*)['\"]?(?:{alternatives})['\"]?(\s*(?:#.*)?)?$",
+        r"\g<1>auto\2",
+        block,
+        count=1,
+    )
+    if count == 0:
+        return text, 0
+    return text[: history_match.start()] + new_block + text[history_match.end() :], count
+
+
+def apply_legacy_history_migrations(text: str) -> tuple[str, int]:
+    text, n_samples = bump_legacy_history_max_samples(text)
+    text, n_age = bump_legacy_history_max_age(text)
+    return text, n_samples + n_age
+
+
 def _persist_legacy_history_max_samples(path: Path, raw: str) -> str:
-    patched, count = bump_legacy_history_max_samples(raw)
+    patched, count = apply_legacy_history_migrations(raw)
     if count == 0:
         return raw
     try:
@@ -523,13 +596,9 @@ def _persist_legacy_history_max_samples(path: Path, raw: str) -> str:
                 os.chown(path, previous.st_uid, previous.st_gid)
             except PermissionError:
                 pass
-        logger.info(
-            "migrated history.max_samples to %s in %s (legacy 10000/20000 default)",
-            HISTORY_DEFAULT_MAX_SAMPLES,
-            path,
-        )
+        logger.info("migrated legacy history.max_samples / max_age_seconds in %s", path)
     except OSError as exc:
-        logger.warning("could not persist history.max_samples migration in %s: %s", path, exc)
+        logger.warning("could not persist history migration in %s: %s", path, exc)
     return patched
 
 

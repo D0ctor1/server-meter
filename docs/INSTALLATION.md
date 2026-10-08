@@ -492,7 +492,7 @@ Na stderr (systemd by to bral jako journal):
 
 ```text
 INFO server_meter starting server-meter env=production driver=bme690 listen=0.0.0.0:8080 (history is RAM-only)
-INFO server_meter.service measurement loop starting driver=bme690 interval=5.0s history_max=2000000
+INFO server_meter.service measurement loop starting driver=bme690 interval=5.0s history_max=2000000 history_max_age=10000000s auto=True
 INFO server_meter.bme690 BME690 detected chip_id=0x61 ...
 INFO uvicorn.error Application startup complete.
 INFO uvicorn.error Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)

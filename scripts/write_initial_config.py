@@ -40,11 +40,11 @@ def main() -> int:
         if args.bsec_config and 'config_blob_path: ""' in text:
             text = text.replace('config_blob_path: ""', f'config_blob_path: "{args.bsec_config}"', 1)
         try:
-            from server_meter.config import bump_legacy_history_max_samples
+            from server_meter.config import apply_legacy_history_migrations
         except ImportError:
             sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-            from server_meter.config import bump_legacy_history_max_samples
-        text, n_hist = bump_legacy_history_max_samples(text)
+            from server_meter.config import apply_legacy_history_migrations
+        text, n_hist = apply_legacy_history_migrations(text)
         dest.write_text(text, encoding="utf-8")
         sys.stdout.write(
             f"PRESERVE {dest} (I2C bus={args.bus} address={addr} "

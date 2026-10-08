@@ -519,6 +519,7 @@
       $("history-info").textContent = t("history.samples_in_ram", {
         count: status.history.samples,
         max: status.history.max_samples,
+        span: status.history.actual_span_seconds == null ? "—" : i18n.formatDuration(status.history.actual_span_seconds),
         dropped: status.history.dropped_oldest,
         memory: fmtMem(status.history.memory_bytes),
         oldest: status.history.oldest_age_seconds == null ? "—" : i18n.formatDuration(status.history.oldest_age_seconds),

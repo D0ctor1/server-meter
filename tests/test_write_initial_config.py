@@ -136,4 +136,6 @@ def test_preserve_bumps_legacy_max_samples_only(tmp_path):
     assert "smtp-secret" in updated
     assert "max_samples: 2000000" in updated
     assert "max_samples: 10000" not in updated
+    assert "max_age_seconds: auto" in updated
+    assert "max_age_seconds: 86400" not in updated
     assert "address: 0x77" in updated

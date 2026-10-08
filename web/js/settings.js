@@ -548,9 +548,15 @@
         [t("settings.general.sensor_type"), app.sensor_type || "BME690"],
         [t("settings.general.interval"), app.interval_seconds != null ? `${app.interval_seconds} s` : "—"],
         [t("settings.general.max_samples"), history.max_samples != null ? history.max_samples : app.history_max_samples],
-        [t("settings.general.max_age"), i18n.formatDuration(
-          history.max_age_seconds != null ? history.max_age_seconds : app.history_max_age_seconds,
-        )],
+        [t("settings.general.max_age"), history.max_age_auto || app.history_max_age_auto
+          ? `${t("settings.general.max_age_auto")} ≈ ${i18n.formatDuration(
+            history.theoretical_max_age_seconds != null
+              ? history.theoretical_max_age_seconds
+              : app.history_max_age_seconds,
+          )}`
+          : i18n.formatDuration(
+            history.max_age_seconds != null ? history.max_age_seconds : app.history_max_age_seconds,
+          )],
         [t("settings.general.ram_protection"), onOff(!!app.memory_protection)],
       ]);
     } catch (err) {

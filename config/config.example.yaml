@@ -56,7 +56,9 @@ history:
   # RAM-only ring buffer. Grows with real samples; not preallocated at start.
   # Absolute maximum is 2000000. Smaller values remain valid.
   max_samples: 2000000
-  max_age_seconds: 86400
+  # auto = max_samples × sensor.interval_seconds (≈115.7 days at 5 s).
+  # Explicit integer still allowed if you want a shorter calendar cap.
+  max_age_seconds: auto
   min_samples_keep: 64
 
 memory_protection:

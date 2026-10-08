@@ -90,11 +90,13 @@ Kód: `server_meter/storage/ram_buffer.py`, `server_meter/monitoring/memory.py`.
 | YAML | Význam | Výchozí |
 |---|---|---|
 | `history.max_samples` | kapacita deque (roste podle skutečných vzorků) | 2000000 |
-| `history.max_age_seconds` | starší vzorky se maže | 86400 (24 h) |
+| `history.max_age_seconds` | starší vzorky se maže | **auto** = `max_samples × interval` |
 | `history.min_samples_keep` | spodní mez při trimu | 64 |
 | tvrdý strop v kódu | `HISTORY_HARD_MAX_SAMPLES` | **2000000** |
 
-`max_samples` je strop, ne alokace při startu. Menší hodnota (např. 100000) zůstává platná. Hodnota `> 2000000` se odmítne. Při intervalu 5 s a výchozím `max_age_seconds: 86400` se v praxi vejde ~17280 vzorků; 2 miliony vyžadují delší `max_age_seconds` (až 180 dní).
+`max_samples` je strop, ne alokace při startu. Menší hodnota (např. 100000) zůstává platná. Hodnota `> 2000000` se odmítne.
+
+`max_age_seconds: auto` (výchozí) spočítá teoretickou kapacitu jako `max_samples × sensor.interval_seconds`. Při 2 000 000 vzorcích a 5 s je to 10 000 000 s ≈ **115,7 dne**, ne 24 hodin. Grafové okno „24 hodin“ filtruje jen zobrazení; serverovou historii nemaže. Skutečný věk v RAM je `newest_timestamp − oldest_timestamp` a po restartu začíná od nuly.
 
 Přibližná RAM (typický BME690/BSEC vzorek, `dataclass(slots=True)` + deque):
 

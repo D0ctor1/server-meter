@@ -58,7 +58,7 @@ def build_router(auth_dep) -> APIRouter:
                 "errors": service.stats.measurement_errors,
                 "recoveries": service.stats.sensor_recoveries,
             },
-            "history": service.buffer.stats(),
+            "history": service.history_stats(),
             "memory": {
                 "pressure": service.memory_pressure().value,
                 "ram_usage_percent": sysm.ram_usage_percent,

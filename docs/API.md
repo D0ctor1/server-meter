@@ -212,12 +212,12 @@ HTTP Basic Auth.
 
 | Parametr | Typ | Omezení | Význam |
 |---|---|---|---|
-| `seconds` | float | `> 0` a `≤ 15552000` | vzorky za posledních N sekund |
+| `seconds` | float | `> 0`, strop = teoretická kapacita ring bufferu | vzorky za posledních N sekund. `86400` = okno 24 h, **není** retention limit. |
 | `limit` | int | `1`–`10000` | nejvýše N **nejnovějších** po filtrování |
 | `since` | float | unix time | vzorky s `timestamp > since` |
 | `max_points` | int | `1`–`10000` | rovnoměrný downsample filtrovaného okna (zachová tvar) |
 
-`seconds` má přednost před `since` (`RamBuffer.snapshot`). `max_points` má přednost před `limit`. Bez `limit` i `max_points` se vrací nejvýše 2000 nejnovějších vzorků — API nikdy nepošle automaticky 2 miliony bodů. Grafy používají `max_points=720`.
+`seconds` má přednost před `since` (`RamBuffer.snapshot`). `max_points` má přednost před `limit`. Bez `seconds` (frontend „Vše“) se bere celá RAM historie, downsamplovaná. Bez `limit` i `max_points` se vrací nejvýše 2000 nejnovějších vzorků — API nikdy nepošle automaticky 2 miliony bodů. Grafy používají `max_points=720`.
 
 Neplatný parametr (např. `limit=0`) → HTTP **422**.
 
@@ -313,7 +313,7 @@ HTTP **200**. Příklad (čísla se liší):
     "interval_seconds": 5.0,
     "bsec_enabled": true,
     "history_max_samples": 2000000,
-    "history_max_age_seconds": 86400,
+    "history_max_age_seconds": 10000000,
     "memory_protection": true,
     "api_docs_enabled": false,
     "auth_enabled": true,
@@ -347,7 +347,10 @@ HTTP **200**. Příklad (čísla se liší):
     "samples": 20,
     "max_samples": 2000000,
     "hard_max_samples": 2000000,
-    "max_age_seconds": 86400.0,
+    "max_age_seconds": 10000000.0,
+    "max_age_auto": true,
+    "theoretical_max_age_seconds": 10000000.0,
+    "actual_span_seconds": 100.0,
     "dropped_oldest": 0,
     "trim_events": 0,
     "oldest_timestamp": 1728287900.0,

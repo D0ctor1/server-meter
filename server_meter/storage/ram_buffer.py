@@ -177,6 +177,7 @@ class RamBuffer:
             count = len(self._data)
             oldest = self._data[0].timestamp if self._data else None
             newest = self._data[-1].timestamp if self._data else None
+            span = None if oldest is None or newest is None else max(0.0, newest - oldest)
             return {
                 "samples": count,
                 "max_samples": self._max_samples,
@@ -188,6 +189,7 @@ class RamBuffer:
                 "newest_timestamp": newest,
                 "oldest_age_seconds": None if oldest is None else max(0.0, now - oldest),
                 "newest_age_seconds": None if newest is None else max(0.0, now - newest),
+                "actual_span_seconds": span,
                 "memory_bytes": count * BYTES_PER_SAMPLE_ESTIMATE,
             }
 
