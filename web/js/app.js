@@ -46,6 +46,7 @@
   const state = {
     lastTs: 0,
     historyCount: 0,
+    lastRole: null,
     charts: {},
     timerCurrent: null,
     timerHistory: null,
@@ -450,11 +451,14 @@
       }
       const banner = $("password-banner");
       const role = status.current_user && status.current_user.role === "admin" ? "admin" : "user";
-      if (window.ServerMeterSettings && window.ServerMeterSettings.setRole) {
-        window.ServerMeterSettings.setRole(role);
-      } else {
-        const gear = $("settings-button");
-        if (gear) gear.hidden = role !== "admin";
+      if (state.lastRole !== role) {
+        state.lastRole = role;
+        if (window.ServerMeterSettings && window.ServerMeterSettings.setRole) {
+          window.ServerMeterSettings.setRole(role);
+        } else {
+          const gear = $("settings-button");
+          if (gear) gear.hidden = role !== "admin";
+        }
       }
       if (banner) {
         banner.hidden = !(status.application.default_password_active && role === "admin");
@@ -607,6 +611,7 @@
   function onLogout() {
     clearAuth();
     stopPolling();
+    state.lastRole = null;
     showLogin("");
   }
 

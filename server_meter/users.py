@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
 import os
 import re
+import secrets
 import sqlite3
 import threading
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -25,6 +29,58 @@ USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 MIN_PASSWORD_LENGTH = 8
 DEFAULT_USERS_DB = "/var/lib/server-meter/users.db"
 MIGRATED_PASSWORD_MARKER = "MIGRATED"
+# Dashboard + Nagios poll Basic Auth many times per minute. Argon2id is
+# intentionally expensive (~tens of ms); cache successful verifications in RAM
+# so polling does not re-hash the same password on every request.
+AUTH_CACHE_TTL_SECONDS = 30.0
+AUTH_CACHE_MAX_ENTRIES = 128
+
+
+class _CredentialCache:
+    """Process-local HMAC cache of successful credential checks. Never persisted."""
+
+    def __init__(self, ttl_seconds: float = AUTH_CACHE_TTL_SECONDS, max_entries: int = AUTH_CACHE_MAX_ENTRIES) -> None:
+        self._ttl = float(ttl_seconds)
+        self._max = int(max_entries)
+        self._secret = secrets.token_bytes(32)
+        self._lock = threading.Lock()
+        self._items: OrderedDict[bytes, tuple[float, Any]] = OrderedDict()
+        self.hits = 0
+        self.misses = 0
+
+    def digest(self, username: str, secret: str) -> bytes:
+        payload = f"{username}\0{secret}".encode("utf-8")
+        return hmac.new(self._secret, payload, hashlib.sha256).digest()
+
+    def get(self, digest: bytes) -> tuple[Any, bool]:
+        now = time.monotonic()
+        with self._lock:
+            item = self._items.get(digest)
+            if item is None:
+                self.misses += 1
+                return None, False
+            expires, value = item
+            if expires <= now:
+                self._items.pop(digest, None)
+                self.misses += 1
+                return None, False
+            self._items.move_to_end(digest)
+            self.hits += 1
+            return value, True
+
+    def put(self, digest: bytes, value: Any) -> None:
+        now = time.monotonic()
+        with self._lock:
+            while len(self._items) >= self._max:
+                self._items.popitem(last=False)
+            self._items[digest] = (now + self._ttl, value)
+            self._items.move_to_end(digest)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._items.clear()
+            self.hits = 0
+            self.misses = 0
 
 _CREATE_SQL = """
 CREATE TABLE IF NOT EXISTS users (
@@ -168,6 +224,7 @@ class UserStore:
         self._hasher = _hasher(test=test)
         self._dummy_hash = self._hasher.hash("timing-dummy")
         self._factory_password: bool | None = None
+        self._auth_cache = _CredentialCache()
         self._lock = threading.Lock()
         uri = path == ":memory:"
         self._conn = sqlite3.connect(
@@ -283,6 +340,7 @@ class UserStore:
         if created is None:
             raise UserError("failed to load created user")
         self._factory_password = None
+        self._auth_cache.clear()
         logger.info("created user %s role=%s enabled=%s", created.username, created.role, created.enabled)
         return created
 
@@ -336,6 +394,7 @@ class UserStore:
         if new_hash != current.password_hash:
             changes.append("password")
         self._factory_password = None
+        self._auth_cache.clear()
         logger.info("updated user %s (%s)", updated.username, ", ".join(changes) or "no field changes")
         return updated
 
@@ -353,6 +412,7 @@ class UserStore:
             self._execute("DELETE FROM users WHERE id = ?", (user_id,))
             self._conn.commit()
         self._factory_password = None
+        self._auth_cache.clear()
         logger.info("deleted user %s", current.username)
         return current
 
@@ -363,6 +423,10 @@ class UserStore:
             return False
 
     def authenticate(self, username: str, password: str) -> UserRecord | None:
+        digest = self._auth_cache.digest(username or "", password or "")
+        cached, hit = self._auth_cache.get(digest)
+        if hit:
+            return cached
         record = self.get_by_username(username)
         if record is None:
             self._verify(self._dummy_hash, password)
@@ -371,7 +435,16 @@ class UserStore:
             return None
         if not record.enabled:
             return None
+        self._auth_cache.put(digest, record)
         return record
+
+    def auth_cache_stats(self) -> dict[str, int]:
+        with self._auth_cache._lock:
+            return {
+                "hits": self._auth_cache.hits,
+                "misses": self._auth_cache.misses,
+                "size": len(self._auth_cache._items),
+            }
 
     def has_factory_password(self) -> bool:
         if self._factory_password is not None:
