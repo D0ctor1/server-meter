@@ -132,7 +132,7 @@ def _prepared_plugin(tmp_path: Path, url: str, password: str = "secret") -> Path
 
 
 def _run(script: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["sh", str(script), *args], check=False, capture_output=True, text=True)
+    return subprocess.run(["bash", str(script), *args], check=False, capture_output=True, text=True)
 
 
 def _check(
@@ -241,7 +241,7 @@ def test_iaq_accuracy_is_not_confused_with_iaq(tmp_path):
     assert "99.9" not in acc.stdout
     assert "| iaq_accuracy=1" in acc.stdout
     assert static_acc.returncode == 0, static_acc.stdout
-    assert "static IAQ accuracy=3" in static_acc.stdout
+    assert "Static IAQ accuracy=3" in static_acc.stdout
     assert "99.9" not in static_acc.stdout
 
 
@@ -250,19 +250,20 @@ def test_missing_metric_is_unknown(tmp_path):
     payload["temperature_c"] = None
     result = _check(tmp_path, payload, "temperature")
     assert result.returncode == 3
-    assert "not available" in result.stdout
+    assert "unavailable" in result.stdout
+    assert "secret" not in result.stdout
 
 
 def test_unknown_metric_is_unknown(tmp_path):
-    result = _check(tmp_path, _payload(), "not_a_metric")
+    result = _check(tmp_path, _payload(), "xyz")
     assert result.returncode == 3
-    assert "unknown metric" in result.stdout
+    assert "UNKNOWN - unknown metric: xyz" in result.stdout
 
 
 def test_sensor_too_old_is_critical(tmp_path):
     result = _check(tmp_path, _payload(sensor_available=True, sensor_age_seconds=37), "sensor")
     assert result.returncode == 2, result.stdout
-    assert "data too old: 37 seconds" in result.stdout
+    assert "sensor data stale (age=37)" in result.stdout
 
 
 def test_sensor_unavailable_is_critical(tmp_path):
@@ -287,7 +288,7 @@ def test_plugin_invalid_json_is_unknown(tmp_path):
 
 
 def test_plugin_help_and_change_me_password():
-    help_result = subprocess.run(["sh", str(PLUGIN), "--help"], check=False, capture_output=True, text=True)
+    help_result = subprocess.run(["bash", str(PLUGIN), "--help"], check=False, capture_output=True, text=True)
     assert help_result.returncode == 3
     assert "SERVER_METER_URL" in help_result.stdout
     assert "CHANGE_ME" not in help_result.stdout
@@ -309,7 +310,7 @@ def test_plugin_help_and_change_me_password():
         "health",
     ):
         assert metric in help_result.stdout
-    bare = subprocess.run(["sh", str(PLUGIN)], check=False, capture_output=True, text=True)
+    bare = subprocess.run(["bash", str(PLUGIN)], check=False, capture_output=True, text=True)
     assert bare.returncode == 3
     assert "SERVER_METER_PASSWORD" in bare.stdout
 
@@ -325,8 +326,10 @@ def test_plugin_has_no_python_jq_or_extra_config():
     assert "--insecure" in text
     assert "CURL_INSECURE=false" in text
     assert "/api/monitoring" in text
+    assert text.splitlines()[0] == "#!/bin/bash"
     assert "TEMP_WARNING=45" in text
     assert "CPU_TEMP_WARNING=70" in text
+    assert "CPU_LOAD_WARNING=80" in text
     assert "RAM_WARNING=85" in text
     installer = INSTALLER.read_text(encoding="utf-8")
     assert "python3" not in installer
@@ -447,18 +450,98 @@ def test_plugin_http_401_403_500_and_timeout(tmp_path):
 def test_plugin_metrics_ok_or_unknown(tmp_path):
     payload = _payload()
     expected = {
-        "humidity": 0,
-        "pressure": 0,
-        "gas_resistance": 0,
-        "eco2": 0,
-        "bvoc": 0,
-        "cpu_load": 0,
-        "static_iaq": 0,
+        "humidity": ("humidity=45.2;80;90", 0),
+        "pressure": ("pressure=1008.3", 0),
+        "gas_resistance": ("gas_resistance=123456", 0),
+        "eco2": ("eco2=650;1500;2500", 0),
+        "bvoc": ("bvoc=0.40;1.0;2.0", 0),
+        "cpu_load": ("cpu_load=10.0;80;95", 0),
+        "static_iaq": ("static_iaq=41.5;150;250", 0),
     }
-    for metric, code in expected.items():
+    for metric, (perf, code) in expected.items():
         result = _check(tmp_path, payload, metric)
         assert result.returncode == code, f"{metric}: {result.stdout}"
         assert "|" in result.stdout
+        assert f"| {perf}" in result.stdout or f"| {perf.split(';')[0]}" in result.stdout
+        perf_part = result.stdout.split("|", 1)[1]
+        assert perf_part.count("=") == 1, f"{metric} must emit one perf metric: {result.stdout}"
+
+
+def test_all_arguments_and_single_perfdata(tmp_path):
+    payload = _payload()
+    expected = {
+        "temperature": "temperature=",
+        "humidity": "humidity=",
+        "pressure": "pressure=",
+        "gas_resistance": "gas_resistance=",
+        "iaq": "iaq=",
+        "iaq_accuracy": "iaq_accuracy=",
+        "static_iaq": "static_iaq=",
+        "static_iaq_accuracy": "static_iaq_accuracy=",
+        "eco2": "eco2=",
+        "bvoc": "bvoc=",
+        "cpu_temperature": "cpu_temperature=",
+        "cpu_load": "cpu_load=",
+        "ram": "ram=",
+        "sensor": "sensor_age=",
+    }
+    for metric, label in expected.items():
+        result = _check(tmp_path, payload, metric)
+        assert result.returncode in (0, 1), f"{metric}: {result.stdout}"
+        assert "|" in result.stdout, result.stdout
+        assert label in result.stdout.split("|", 1)[1]
+        others = [item for name, item in expected.items() if name != metric]
+        perf = result.stdout.split("|", 1)[1]
+        for other in others:
+            if other.rstrip("=") != label.rstrip("="):
+                assert other not in perf.split(), f"{metric} leaked {other}: {result.stdout}"
+
+    health = _check(tmp_path, payload)
+    assert health.returncode == 0
+    assert "server-meter reachable" in health.stdout
+    named = _check(tmp_path, payload, "health")
+    assert named.returncode == 0
+    assert "server-meter reachable" in named.stdout
+
+
+def test_sensor_unavailable_fails_bme_metrics(tmp_path):
+    payload = _payload(sensor_available=False)
+    for metric in (
+        "temperature",
+        "humidity",
+        "pressure",
+        "gas_resistance",
+        "iaq",
+        "iaq_accuracy",
+        "static_iaq",
+        "static_iaq_accuracy",
+        "eco2",
+        "bvoc",
+        "sensor",
+    ):
+        result = _check(tmp_path, payload, metric)
+        assert result.returncode == 2, f"{metric}: {result.stdout}"
+        assert "BME690 sensor unavailable" in result.stdout
+
+    cpu = _check(tmp_path, payload, "cpu_temperature")
+    assert cpu.returncode == 0, cpu.stdout
+    assert "| cpu_temperature=" in cpu.stdout
+
+
+def test_stale_sensor_fails_bme_metrics(tmp_path):
+    payload = _payload(sensor_available=True, sensor_age_seconds=37)
+    result = _check(tmp_path, payload, "temperature")
+    assert result.returncode == 2, result.stdout
+    assert "sensor data stale (age=37)" in result.stdout
+    iaq = _check(tmp_path, payload, "iaq")
+    assert iaq.returncode == 2, iaq.stdout
+    assert "sensor data stale" in iaq.stdout
+
+
+def test_plugin_bash_syntax():
+    checked = subprocess.run(["bash", "-n", str(PLUGIN)], check=False, capture_output=True, text=True)
+    assert checked.returncode == 0, checked.stderr
+    assert PLUGIN.read_text(encoding="utf-8").splitlines()[0] == "#!/bin/bash"
 
 
 def test_installer_creates_backup(tmp_path):
@@ -497,3 +580,43 @@ def test_plugin_mode_in_repo_is_executable():
     mode = PLUGIN.stat().st_mode
     assert mode & stat.S_IXUSR
     assert os.access(PLUGIN, os.X_OK)
+
+
+def test_installer_replaces_non_shell_plugin(tmp_path):
+    nagios_etc = tmp_path / "nagios" / "etc"
+    objects = nagios_etc / "objects"
+    objects.mkdir(parents=True)
+    nagios_cfg = nagios_etc / "nagios.cfg"
+    nagios_cfg.write_text("log_file=/var/log/nagios.log\n", encoding="utf-8")
+    plugin_dir = tmp_path / "libexec"
+    plugin_dir.mkdir()
+    dest = plugin_dir / "check_server_meter.sh"
+    dest.write_text(
+        "#!/usr/bin/env python3\nfrom __future__ import annotations\nprint('wrong')\n",
+        encoding="utf-8",
+    )
+    dest.chmod(0o755)
+    fake_bin = tmp_path / "nagios-bin"
+    fake_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    fake_bin.chmod(0o755)
+    env = os.environ.copy()
+    env.update(
+        {
+            "SKIP_ROOT_CHECK": "1",
+            "PLUGIN_DIR": str(plugin_dir),
+            "NAGIOS_OBJECTS_DIR": str(objects),
+            "NAGIOS_CFG": str(nagios_cfg),
+            "NAGIOS_BIN": str(fake_bin),
+            "NAGIOS_RELOAD": "0",
+            "INCLUDE_HOST": "1",
+        }
+    )
+    result = subprocess.run(["bash", str(INSTALLER)], check=False, capture_output=True, text=True, env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "not a bash plugin" in result.stdout
+    installed = dest.read_text(encoding="utf-8")
+    assert installed.splitlines()[0] == "#!/bin/bash"
+    assert "from __future__" not in installed
+    assert dest.stat().st_mode & 0o777 == 0o700
+    backups = list(plugin_dir.glob("check_server_meter.sh.bak.*"))
+    assert backups

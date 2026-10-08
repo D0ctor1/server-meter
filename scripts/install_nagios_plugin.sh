@@ -210,13 +210,27 @@ if [[ -f "$DEST" ]]; then
   backup_file "$DEST"
 fi
 
-if [[ -f "$DEST" ]] && grep -q '^# === server-meter plugin configuration ===' "$DEST"; then
+first_line="$(head -n 1 "$DEST" 2>/dev/null || true)"
+is_shell_plugin=0
+case "$first_line" in
+  '#!/bin/bash'|'#!/bin/sh'|'#!/usr/bin/env bash'|'#!/usr/bin/env sh')
+    is_shell_plugin=1
+    ;;
+  '#!/bin/bash '*|'#!/bin/sh '*|'#!/usr/bin/env bash '*|'#!/usr/bin/env sh '*)
+    is_shell_plugin=1
+    ;;
+esac
+
+if [[ -f "$DEST" && "$is_shell_plugin" -eq 1 ]] && grep -q '^# === server-meter plugin configuration ===' "$DEST"; then
   {
     sed '/^# === server-meter plugin configuration ===/,$d' "$SRC"
     awk '/^# === server-meter plugin configuration ===/,/^# === end configuration ===/' "$DEST"
     sed '1,/^# === end configuration ===/d' "$SRC"
   } > "$staging"
 else
+  if [[ -f "$DEST" && "$is_shell_plugin" -eq 0 ]]; then
+    echo "WARNING: existing ${DEST} is not a bash plugin; replacing it. Re-enter SERVER_METER_PASSWORD in the new script."
+  fi
   cp "$SRC" "$staging"
 fi
 

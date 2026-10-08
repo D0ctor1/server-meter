@@ -4,7 +4,7 @@ Nagios Core běží **typicky na jiném serveru** než Raspberry Pi. Kontroluje 
 
 **Samotný Nagios Core grafy nevytváří.** Služba nese stav, aktuální hodnotu a performance data. Historii a grafy kreslí backend (PNP4Nagios, Nagiosgraph, …).
 
-**Globální prostředí Nagiosu se nemění.** Do Nagios hostitele se kvůli server-meter neinstaluje další interpret. Plugin používá `curl`, `sed`, `awk`, `grep`, `cut`, `printf`.
+**Globální prostředí Nagiosu se nemění.** Do Nagios hostitele se kvůli server-meter neinstaluje Python 3, neupgraduje se Python 2.7 a nemění se Nagios Core 4.4.5. Plugin je čistý bash (`#!/bin/bash`) a používá `curl`, `sed`, `awk`, `grep`, `cut`, `printf`.
 
 ```text
 Nagios Core 4.4.5
@@ -25,7 +25,7 @@ Jeden plugin, mnoho Nagios services. **Žádný** extra `/etc/nagios/private/ser
 
 IAQ prahy jsou BSEC index anomálie, **ne** zdravotní / toxikologická hranice.
 
-Legacy endpoint `GET /api/nagios/check` + `scripts/check_server_meter.py` zůstává.
+`scripts/check_server_meter.py` je legacy helper a **nesmí** se kopírovat jako `/usr/local/nagios/libexec/check_server_meter.sh`. Instalační skript nahradí soubor `.sh`, který není bash plugin.
 
 server-meter **neposílá e-mail Nagiosu**. Nagios má vlastní notifikace. Viz [NOTIFICATIONS.md](NOTIFICATIONS.md).
 
@@ -199,7 +199,7 @@ Vzdálený HTTP server **nemůže** nastavit unix exit code procesu na Nagios se
 | Tělo + hlavičky | stav kontroly (OK/WARNING/CRITICAL/UNKNOWN) |
 | Exit code pluginu | `0`/`1`/`2`/`3` procesu, který Nagios spustí **u sebe** |
 
-Legacy plugin `scripts/check_server_meter.py` čte hlavičku `X-Nagios-State` (případně první slovo těla) a **sám** vrátí odpovídající exit code. Preferujte `check_server_meter.sh` + `/api/monitoring`, pokud na Nagios hostiteli nechcete Python 3.
+Legacy helper `scripts/check_server_meter.py` čte hlavičku `X-Nagios-State` (případně první slovo těla) a **sám** vrátí odpovídající exit code. Na Nagios hostiteli s Pythonem 2.7 to nespouštějte a nikdy to neukládejte jako `check_server_meter.sh`.
 
 `check_http` standardně mapuje HTTP 200 → OK. WARNING i CRITICAL endpointu zůstanou HTTP 200, takže **`check_http` bez další logiky nerozliší** WARNING od OK.
 
@@ -300,11 +300,11 @@ x-nagios-state: OK
 
 ---
 
-## Krok 2 — Plugin `check_server_meter.py`
+## Krok 2 — Legacy helper `check_server_meter.py` (nepoužívejte jako `.sh`)
 
-Soubor v projektu: `scripts/check_server_meter.py`.
+**Podporovaný plugin je `check_server_meter.sh` (bash).** Tento Python helper neinstalujte jako `/usr/local/nagios/libexec/check_server_meter.sh` a neupgradujte kvůli němu Python 2.7 / Nagios Core.
 
-Používá jen standardní knihovnu Pythonu (`urllib`). Na Nagios serveru stačí `python3`.
+Soubor v projektu: `scripts/check_server_meter.py` (vyžaduje Python 3, který na Nagios Core 4.4.5 hostiteli často není).
 
 ### Instalace pluginu na Nagios server
 

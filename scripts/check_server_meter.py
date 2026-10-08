@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Nagios Core plugin for server-meter.
+"""Legacy Nagios helper. Do NOT install this file as check_server_meter.sh.
+
+The supported plugin is scripts/check_server_meter.sh (pure bash, curl only).
+Nagios Core 4.4.5 hosts often have only Python 2.7; this file needs Python 3
+and must never replace the .sh plugin.
 
 Exit codes: 0=OK 1=WARNING 2=CRITICAL 3=UNKNOWN
 
