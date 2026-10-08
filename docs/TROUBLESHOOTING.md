@@ -307,6 +307,8 @@ Sledujte `memory.pressure` a `history.samples`. Při warning/critical/emergency 
 
 Snižte `history.max_samples` (maximum je 2000000, menší hodnota je platná) a restartujte službu (nový limit platí po startu). Memory protection maže nejstarší vzorky při vysokém RAM%. Historie se na SD nezapisuje.
 
+Settings → Obecné ukazuje **živou** hodnotu z `/etc/server-meter/config.yaml`, ne default z kódu. Po upgradu se staré `max_samples: 10000` (nebo 20000) při startu služby samo změní na `2000000`. Ostatní klíče se nemění. Bez restartu zůstane v UI původních 10000.
+
 ---
 
 ## systemd restart loop
