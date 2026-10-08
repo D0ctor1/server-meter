@@ -258,6 +258,10 @@ select {
   flex-direction: column;
   gap: 12px;
 }
+.settings-section[hidden],
+.settings-tab[hidden] {
+  display: none !important;
+}
 .settings-section h2 {
   margin: 0;
   font-size: 14px;
@@ -329,9 +333,12 @@ select {
 .settings-status[hidden] { display: none !important; }
 .settings-nav {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   margin: 0 0 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 .tab-btn {
   background: transparent;
@@ -341,6 +348,8 @@ select {
   padding: 6px 10px;
   cursor: pointer;
   font-size: 13px;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 .tab-btn.is-active {
   color: var(--text);
@@ -461,6 +470,12 @@ footer {
 
 @media (max-width: 980px) {
   .status-grid, .cards, .charts, .health-grid, .alerts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 720px) {
+  .settings-nav {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
 }
 @media (max-width: 640px) {
   body { padding: 16px 12px 32px; }

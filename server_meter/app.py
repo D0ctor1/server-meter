@@ -23,7 +23,7 @@ from server_meter.config import AppConfig
 from server_meter.service import MeterService
 from server_meter.users import UserStore, migrate_yaml_admin, resolve_users_db_path
 
-WEB_ASSET_VERSION = f"{__version__}.ui5"
+WEB_ASSET_VERSION = f"{__version__}.ui6"
 
 
 def resolve_web_root() -> Path:
@@ -115,8 +115,7 @@ def create_app(config: AppConfig, service: MeterService | None = None) -> FastAP
         if js.is_dir():
             app.mount("/js", StaticFiles(directory=str(js)), name="js")
 
-    @app.get("/", include_in_schema=False)
-    async def index() -> HTMLResponse:
+    def _index_html() -> HTMLResponse:
         # HTML/JS/CSS are public so the login form can be localized.
         # Measurement APIs remain behind HTTP Basic Auth.
         template = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
@@ -128,6 +127,14 @@ def create_app(config: AppConfig, service: MeterService | None = None) -> FastAP
             .replace("__ASSET__", WEB_ASSET_VERSION)
         )
         return HTMLResponse(content=html)
+
+    @app.get("/", include_in_schema=False)
+    async def index() -> HTMLResponse:
+        return _index_html()
+
+    @app.get("/settings", include_in_schema=False)
+    async def settings_page() -> HTMLResponse:
+        return _index_html()
 
     if not config.web.health_public:
         # The public health route is already registered; replace it.
