@@ -348,9 +348,12 @@ class BsecProcessor:
                 name = BSEC_OUTPUT_NAMES.get(sid, f"id:{sid}")
                 present.append(f"{name}={float(outputs[i].signal):g}(acc={int(outputs[i].accuracy)})")
             logger.info("BSEC first outputs: %s", " ".join(present) if present else "(none)")
-            if result.breath_voc_equivalent is None:
+            if (
+                result.breath_voc_equivalent is None
+                and BSEC_OUTPUT_BREATH_VOC_EQUIVALENT in self._subscribed_ids
+            ):
                 logger.warning(
-                    "BSEC did not return breath-VOC equivalent (id=%s) on first do_steps; "
+                    "BSEC subscribed breath-VOC (id=%s) but first do_steps did not return it; "
                     "subscribed=%s",
                     BSEC_OUTPUT_BREATH_VOC_EQUIVALENT,
                     ",".join(self.subscribed_output_names) or "(none)",
