@@ -16,8 +16,8 @@ from server_meter.config import HISTORY_HARD_MAX_SAMPLES
 from server_meter.models.measurement import Measurement
 
 # slots Measurement + typical float payload + deque pointer. Calibrated by
-# tests/test_history_scale.py; not a reservation of this many bytes up front.
-BYTES_PER_SAMPLE_ESTIMATE = 520
+# tests/test_history_scale.py (~281 B/sample RSS at 2M). Not a reservation.
+BYTES_PER_SAMPLE_ESTIMATE = 280
 
 
 def even_indices(n: int, k: int) -> list[int]:

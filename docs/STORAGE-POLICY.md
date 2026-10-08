@@ -96,6 +96,15 @@ Kód: `server_meter/storage/ram_buffer.py`, `server_meter/monitoring/memory.py`.
 
 `max_samples` je strop, ne alokace při startu. Menší hodnota (např. 100000) zůstává platná. Hodnota `> 2000000` se odmítne. Při intervalu 5 s a výchozím `max_age_seconds: 86400` se v praxi vejde ~17280 vzorků; 2 miliony vyžadují delší `max_age_seconds` (až 180 dní).
 
+Přibližná RAM (typický BME690/BSEC vzorek, `dataclass(slots=True)` + deque):
+
+| Vzorků | RAM |
+|---|---|
+| 100 000 | ~27 MB |
+| 500 000 | ~140 MB |
+| 1 000 000 | ~281 MB |
+| 2 000 000 | ~562 MB |
+
 Přetečení `max_samples`: deque zahodí **nejstarší** vzorek. Nikam se neukládá.
 
 Přetečení stáří: `popleft()` dokud je nejstarší pod cutoff; alespoň 1 vzorek zůstane.
@@ -149,7 +158,7 @@ Největší procesy:
 ps aux --sort=-%mem | head
 ```
 
-Hledejte `python -m server_meter`. RSS desítky MB je běžné. Plný strop 2 000 000 vzorků je řádově ~1 GB RAM; memory protection maže nejstarší vzorky dřív, než dojde k OOM. Historie se na disk nezapisuje. Webový graf stahuje nejvýše stovky bodů (`max_points`), ne celý buffer.
+Hledejte `python -m server_meter`. RSS desítky MB je běžné. Plný strop 2 000 000 vzorků je řádově ~560 MB RAM (~280 B/vzorek); memory protection maže nejstarší vzorky dřív, než dojde k OOM. Historie se na disk nezapisuje. Webový graf stahuje nejvýše stovky bodů (`max_points`), ne celý buffer.
 
 Z API:
 

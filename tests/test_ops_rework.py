@@ -7,7 +7,7 @@ from server_meter.config import NotificationsConfig
 from server_meter.models.measurement import Measurement, SensorStatus
 from server_meter.notification.engine import NotificationEngine
 from server_meter.service import MeterService
-from server_meter.storage.ram_buffer import RamBuffer
+from server_meter.storage.ram_buffer import BYTES_PER_SAMPLE_ESTIMATE, RamBuffer
 from tests.conftest import make_config
 from tests.test_notifications import Clock, _sample, _system
 
@@ -123,7 +123,7 @@ def test_ram_buffer_stats_include_memory(tmp_path):
     buf.append(Measurement(timestamp=10.0, temperature=21.0))
     stats = buf.stats()
     assert stats["samples"] == 1
-    assert stats["memory_bytes"] == 480
+    assert stats["memory_bytes"] == BYTES_PER_SAMPLE_ESTIMATE
     assert stats["newest_timestamp"] == 10.0
 
 

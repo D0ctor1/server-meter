@@ -362,7 +362,7 @@ const context = {
       if (url === "/api/status") {
         return {
           application: { locale: "CZ", environment: "test", interval_seconds: 5, sensor_type: "BME690", memory_protection: true, history_max_samples: 100, history_max_age_seconds: 3600 },
-          history: { samples: 3, max_samples: 100, max_age_seconds: 3600, memory_bytes: 1440 },
+          history: { samples: 3, max_samples: 100, max_age_seconds: 3600, memory_bytes: 840 },
           memory: { ram_usage_percent: 20, pressure: "normal" },
           sensor: { status: "ok", age_seconds: 4 },
           system_health: { items: { i2c: { status: "ok" }, bsec: { status: "ok" }, bme690: { status: "ok" }, ram_protection: { status: "ok" } } },
