@@ -479,8 +479,9 @@ write_config() {
   step 7 "Creating server-meter"
   ensure_user_and_dirs
   ok
-  # Existing YAML is kept as-is (password, locale, bind address, …).
+  # Existing YAML is kept as-is (password, locale, bind address, SMTP, …).
   # Missing web.locale is not injected; the app defaults to CZ.
+  # Legacy history.max_samples 10000/20000 is bumped to 2000000 only.
   step 8 "Creating configuration"
   "$(python_bin)" "${PREFIX}/scripts/write_initial_config.py" \
     --example "${PREFIX}/config/config.example.yaml" \

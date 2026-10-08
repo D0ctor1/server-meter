@@ -60,3 +60,18 @@ def test_history_api_declares_ram(client, auth):
     payload = client.get("/api/history", auth=auth).json()
     assert payload["source"] == "ram"
     assert payload["persistent"] is False
+
+
+def test_ram_buffer_never_opens_files():
+    text = (SRC / "storage" / "ram_buffer.py").read_text(encoding="utf-8")
+    for token in ("open(", "Path(", "write_text", "json.dump", "sqlite", "csv"):
+        assert token not in text
+
+
+def test_frontend_never_requests_full_two_million_points():
+    app_js = (ROOT / "web" / "js" / "app.js").read_text(encoding="utf-8")
+    assert "const MAX_POINTS = 720;" in app_js
+    assert "max_points=${MAX_POINTS}" in app_js
+    assert "downsampleEven" in app_js
+    assert "/api/history`" not in app_js
+    assert "limit=${MAX_POINTS}" not in app_js

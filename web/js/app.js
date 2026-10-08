@@ -262,8 +262,23 @@
     }
   }
 
+  function downsampleEven(samples, maxPoints) {
+    const n = samples.length;
+    if (n <= maxPoints) return samples;
+    const out = [];
+    const seen = new Set();
+    for (let i = 0; i < maxPoints; i += 1) {
+      const idx = Math.round((i * (n - 1)) / (maxPoints - 1));
+      if (seen.has(idx)) continue;
+      seen.add(idx);
+      out.push(samples[idx]);
+    }
+    return out;
+  }
+
   function appendSamples(samples) {
     if (!samples.length) return;
+    if (samples.length > MAX_POINTS) samples = downsampleEven(samples, MAX_POINTS);
     for (const sample of samples) {
       const x = sample.timestamp * 1000;
       for (const spec of CHARTS) {
@@ -503,6 +518,8 @@
       pollAlarmHistory();
       $("history-info").textContent = t("history.samples_in_ram", {
         count: status.history.samples,
+        max: status.history.max_samples,
+        span: status.history.actual_span_seconds == null ? "—" : i18n.formatDuration(status.history.actual_span_seconds),
         dropped: status.history.dropped_oldest,
         memory: fmtMem(status.history.memory_bytes),
         oldest: status.history.oldest_age_seconds == null ? "—" : i18n.formatDuration(status.history.oldest_age_seconds),
@@ -534,12 +551,12 @@
       let url;
       if (windowVal === "all") {
         url = (initial || state.lastTs === 0)
-          ? `/api/history?limit=${MAX_POINTS}`
+          ? `/api/history?max_points=${MAX_POINTS}`
           : `/api/history?since=${state.lastTs}&limit=200`;
       } else {
         const windowSec = Number(windowVal);
         url = initial || state.lastTs === 0
-          ? `/api/history?seconds=${windowSec}&limit=${MAX_POINTS}`
+          ? `/api/history?seconds=${windowSec}&max_points=${MAX_POINTS}`
           : `/api/history?since=${state.lastTs}&limit=200`;
       }
       const payload = await getJson(url);

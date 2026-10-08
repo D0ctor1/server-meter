@@ -2,6 +2,8 @@
 
 Sensor samples exist only in RAM. They are never written to disk, even when
 the buffer is trimmed under memory pressure.
+
+The deque grows with real samples. `maxlen` is a ceiling, not a preallocation.
 """
 
 from __future__ import annotations
@@ -9,10 +11,31 @@ from __future__ import annotations
 import threading
 import time
 from collections import deque
-from typing import Iterable
 
 from server_meter.config import HISTORY_HARD_MAX_SAMPLES
 from server_meter.models.measurement import Measurement
+
+# slots Measurement + typical float payload + deque pointer. Calibrated by
+# tests/test_history_scale.py (~281 B/sample RSS at 2M). Not a reservation.
+BYTES_PER_SAMPLE_ESTIMATE = 280
+
+
+def even_indices(n: int, k: int) -> list[int]:
+    """Return k indices in 0..n-1 including both ends, spaced as evenly as possible."""
+    if n <= 0 or k <= 0:
+        return []
+    if k >= n:
+        return list(range(n))
+    if k == 1:
+        return [n - 1]
+    raw = [round(i * (n - 1) / (k - 1)) for i in range(k)]
+    out: list[int] = []
+    seen: set[int] = set()
+    for idx in raw:
+        if idx not in seen:
+            seen.add(idx)
+            out.append(idx)
+    return out
 
 
 class RamBuffer:
@@ -35,6 +58,7 @@ class RamBuffer:
         self._max_age_seconds = float(max_age_seconds)
         self._min_samples_keep = max(1, min(int(min_samples_keep), cap))
         self._lock = threading.Lock()
+        # maxlen caps growth; CPython deque allocates blocks of 64 as needed.
         self._data: deque[Measurement] = deque(maxlen=cap)
         self._dropped_oldest = 0
         self._trim_events = 0
@@ -111,33 +135,49 @@ class RamBuffer:
         seconds: float | None = None,
         limit: int | None = None,
         since: float | None = None,
+        max_points: int | None = None,
     ) -> list[Measurement]:
-        """Return a copy of selected samples (still RAM-only)."""
+        """Return selected samples without copying the whole ring unless needed.
+
+        Time filters always address a suffix (timestamps are monotonic).
+        `max_points` even-downsamples that suffix (keeps shape). `limit` keeps
+        the newest N. `max_points` wins when both are set.
+        """
+        exclusive_since = seconds is None and since is not None
+        cutoff: float | None = None
+        if seconds is not None and seconds > 0:
+            cutoff = time.time() - float(seconds)
+        elif since is not None:
+            cutoff = float(since)
+
         with self._lock:
-            samples: Iterable[Measurement] = self._data
-            if seconds is not None and seconds > 0:
-                cutoff = time.time() - float(seconds)
-                samples = [s for s in samples if s.timestamp >= cutoff]
-            elif since is not None:
-                samples = [s for s in samples if s.timestamp > float(since)]
-            else:
-                samples = list(samples)
-            result = list(samples)
-        if limit is not None and limit >= 0:
-            if limit == 0:
+            data = self._data
+            n = len(data)
+            if n == 0:
                 return []
-            if len(result) > limit:
-                result = result[-limit:]
-        return result
+            matching = self._matching_suffix_len_locked(cutoff, exclusive_since)
+            if matching <= 0:
+                return []
+            if max_points is not None:
+                if max_points <= 0:
+                    return []
+                if matching <= max_points:
+                    return self._collect_suffix_locked(matching)
+                return self._even_suffix_locked(matching, max_points)
+            if limit is not None:
+                if limit <= 0:
+                    return []
+                take = min(limit, matching)
+                return self._collect_newest_locked(take)
+            return self._collect_suffix_locked(matching)
 
     def stats(self) -> dict[str, int | float | None]:
         now = time.time()
-        # Approximate RAM cost of one Measurement (slots + Python object overhead).
-        bytes_per_sample = 480
         with self._lock:
             count = len(self._data)
             oldest = self._data[0].timestamp if self._data else None
             newest = self._data[-1].timestamp if self._data else None
+            span = None if oldest is None or newest is None else max(0.0, newest - oldest)
             return {
                 "samples": count,
                 "max_samples": self._max_samples,
@@ -149,8 +189,58 @@ class RamBuffer:
                 "newest_timestamp": newest,
                 "oldest_age_seconds": None if oldest is None else max(0.0, now - oldest),
                 "newest_age_seconds": None if newest is None else max(0.0, now - newest),
-                "memory_bytes": count * bytes_per_sample,
+                "actual_span_seconds": span,
+                "memory_bytes": count * BYTES_PER_SAMPLE_ESTIMATE,
             }
+
+    def _matching_suffix_len_locked(self, cutoff: float | None, exclusive: bool) -> int:
+        if cutoff is None:
+            return len(self._data)
+        matched = 0
+        for sample in reversed(self._data):
+            ts = sample.timestamp
+            if exclusive:
+                if ts <= cutoff:
+                    break
+            elif ts < cutoff:
+                break
+            matched += 1
+        return matched
+
+    def _collect_newest_locked(self, take: int) -> list[Measurement]:
+        if take <= 0:
+            return []
+        if take >= len(self._data):
+            return list(self._data)
+        out: list[Measurement] = []
+        for i, sample in enumerate(reversed(self._data)):
+            if i >= take:
+                break
+            out.append(sample)
+        out.reverse()
+        return out
+
+    def _collect_suffix_locked(self, matching: int) -> list[Measurement]:
+        n = len(self._data)
+        if matching >= n:
+            return list(self._data)
+        return self._collect_newest_locked(matching)
+
+    def _even_suffix_locked(self, matching: int, k: int) -> list[Measurement]:
+        wanted_rel = even_indices(matching, k)
+        if not wanted_rel:
+            return []
+        wanted_from_right = {matching - 1 - idx for idx in wanted_rel}
+        found: dict[int, Measurement] = {}
+        for reverse_i, sample in enumerate(reversed(self._data)):
+            if reverse_i >= matching:
+                break
+            if reverse_i not in wanted_from_right:
+                continue
+            found[matching - 1 - reverse_i] = sample
+            if len(found) == len(wanted_rel):
+                break
+        return [found[idx] for idx in wanted_rel if idx in found]
 
     def _trim_oldest_locked(self, count: int) -> int:
         removed = 0

@@ -43,7 +43,7 @@ class MeterService:
         self.config = config
         self.buffer = RamBuffer(
             max_samples=config.history.max_samples,
-            max_age_seconds=config.history.max_age_seconds,
+            max_age_seconds=config.resolved_history_max_age_seconds(),
             min_samples_keep=config.history.min_samples_keep,
         )
         self.system = SystemMonitor()
@@ -78,10 +78,12 @@ class MeterService:
 
     async def run_forever(self) -> None:
         logger.info(
-            "measurement loop starting driver=%s interval=%.1fs history_max=%d",
+            "measurement loop starting driver=%s interval=%.1fs history_max=%d history_max_age=%.0fs auto=%s",
             self.driver.name,
             self.config.sensor.interval_seconds,
             self.buffer.max_samples,
+            self.config.resolved_history_max_age_seconds(),
+            self.config.history.max_age_seconds is None,
         )
         await asyncio.to_thread(self._try_open_sensor)
         while not self._stop.is_set():
@@ -186,6 +188,12 @@ class MeterService:
             )
             self._logged_down = True
         self.notifier.observe(None, self.system.snapshot(), self.sensor_status, self.sensor_age_seconds())
+
+    def history_stats(self) -> dict:
+        stats = self.buffer.stats()
+        stats["max_age_auto"] = self.config.history.max_age_seconds is None
+        stats["theoretical_max_age_seconds"] = self.config.theoretical_history_max_age_seconds()
+        return stats
 
     def system_snapshot(self) -> SystemMetrics:
         return self.system.snapshot()

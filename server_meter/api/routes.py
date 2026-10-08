@@ -10,6 +10,11 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 
 from server_meter.api.nagios import NagiosState, evaluate_nagios
 from server_meter.api.settings import monitoring_payload
+from server_meter.config import (
+    HISTORY_API_DEFAULT_LIMIT,
+    HISTORY_API_MAX_LIMIT,
+    HISTORY_MAX_AGE_SECONDS,
+)
 from server_meter.health import assemble_system_health, liveness_payload
 from server_meter.models.measurement import iaq_accuracy_label
 from server_meter.service import MeterService
@@ -53,7 +58,7 @@ def build_router(auth_dep) -> APIRouter:
                 "errors": service.stats.measurement_errors,
                 "recoveries": service.stats.sensor_recoveries,
             },
-            "history": service.buffer.stats(),
+            "history": service.history_stats(),
             "memory": {
                 "pressure": service.memory_pressure().value,
                 "ram_usage_percent": sysm.ram_usage_percent,
@@ -90,16 +95,26 @@ def build_router(auth_dep) -> APIRouter:
     async def history(
         request: Request,
         _user: AuthUser = Depends(auth_dep),
-        seconds: Annotated[float | None, Query(gt=0, le=604800)] = None,
-        limit: Annotated[int | None, Query(ge=1, le=20_000)] = None,
+        seconds: Annotated[float | None, Query(gt=0, le=HISTORY_MAX_AGE_SECONDS)] = None,
+        limit: Annotated[int | None, Query(ge=1, le=HISTORY_API_MAX_LIMIT)] = None,
         since: Annotated[float | None, Query()] = None,
+        max_points: Annotated[int | None, Query(ge=1, le=HISTORY_API_MAX_LIMIT)] = None,
     ) -> dict[str, Any]:
         service: MeterService = request.app.state.service
-        samples = service.buffer.snapshot(seconds=seconds, limit=limit, since=since)
+        effective_limit = limit
+        if max_points is None and effective_limit is None:
+            effective_limit = HISTORY_API_DEFAULT_LIMIT
+        samples = service.buffer.snapshot(
+            seconds=seconds,
+            limit=effective_limit,
+            since=since,
+            max_points=max_points,
+        )
         return {
             "count": len(samples),
             "source": "ram",
             "persistent": False,
+            "downsampled": max_points is not None,
             "samples": [s.to_api_dict() for s in samples],
         }
 

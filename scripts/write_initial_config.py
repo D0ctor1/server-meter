@@ -3,6 +3,9 @@
 
 Never changes the password, bind address, port, or web.locale.
 Missing locale is left missing; the application defaults to CZ.
+
+On upgrade, history.max_samples is bumped from the old shipped defaults
+(10000 / 20000) to 2000000. Any other value is left alone.
 """
 
 from __future__ import annotations
@@ -36,8 +39,17 @@ def main() -> int:
             text = text.replace('library_path: ""', f'library_path: "{args.bsec_lib}"', 1)
         if args.bsec_config and 'config_blob_path: ""' in text:
             text = text.replace('config_blob_path: ""', f'config_blob_path: "{args.bsec_config}"', 1)
+        try:
+            from server_meter.config import apply_legacy_history_migrations
+        except ImportError:
+            sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+            from server_meter.config import apply_legacy_history_migrations
+        text, n_hist = apply_legacy_history_migrations(text)
         dest.write_text(text, encoding="utf-8")
-        sys.stdout.write(f"PRESERVE {dest} (I2C bus={args.bus} address={addr} addr_hits={n_addr} bus_hits={n_bus})\n")
+        sys.stdout.write(
+            f"PRESERVE {dest} (I2C bus={args.bus} address={addr} "
+            f"addr_hits={n_addr} bus_hits={n_bus} history_max_bump={n_hist})\n"
+        )
         return 0
 
     text = Path(args.example).read_text(encoding="utf-8")

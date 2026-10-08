@@ -105,3 +105,37 @@ def test_preserve_does_not_overwrite_or_inject_locale(tmp_path):
     )
     kept = missing.read_text(encoding="utf-8")
     assert "locale:" not in kept
+
+
+def test_preserve_bumps_legacy_max_samples_only(tmp_path):
+    dest = tmp_path / "config.yaml"
+    dest.write_text(
+        "application:\n  environment: production\n"
+        "web:\n  auth:\n    password: KeepPass1\n"
+        "sensor:\n  i2c:\n    bus: 1\n    address: 0x76\n"
+        "history:\n  max_samples: 10000\n  max_age_seconds: 86400\n"
+        "notifications:\n  email:\n    smtp:\n      password: smtp-secret\n",
+        encoding="utf-8",
+    )
+    subprocess.check_call(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--example",
+            str(EXAMPLE),
+            "--dest",
+            str(dest),
+            "--bus",
+            "1",
+            "--address",
+            "0x77",
+        ]
+    )
+    updated = dest.read_text(encoding="utf-8")
+    assert "KeepPass1" in updated
+    assert "smtp-secret" in updated
+    assert "max_samples: 2000000" in updated
+    assert "max_samples: 10000" not in updated
+    assert "max_age_seconds: auto" in updated
+    assert "max_age_seconds: 86400" not in updated
+    assert "address: 0x77" in updated

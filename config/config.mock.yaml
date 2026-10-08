@@ -27,7 +27,7 @@ sensor:
 
 history:
   max_samples: 2000
-  max_age_seconds: 86400
+  max_age_seconds: auto
 
 memory_protection:
   enabled: true

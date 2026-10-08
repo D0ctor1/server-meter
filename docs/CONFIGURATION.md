@@ -25,7 +25,7 @@ Příklady v git stromu:
 | `config/config.yaml.example` | zkrácená kopie šablony |
 | `config/config.mock.yaml` | vývoj bez BME690 |
 
-`install.sh` kopíruje example do `/etc/server-meter/config.yaml` **jen pokud ten soubor ještě neexistuje**.
+`install.sh` kopíruje example do `/etc/server-meter/config.yaml` **jen pokud ten soubor ještě neexistuje**. Při upgradu se v existujícím YAML změní pouze staré výchozí `history.max_samples: 10000` (nebo 20000) na `2000000` a `history.max_age_seconds: 86400` na `auto`. Hesla, SMTP, locale a záměrně jiné hodnoty se nepřepisují. Stejná migrace probíhá při startu služby.
 
 ---
 
@@ -72,8 +72,8 @@ sensor:
     persist_state: false
 
 history:
-  max_samples: 10000
-  max_age_seconds: 86400
+  max_samples: 2000000
+  max_age_seconds: auto
   min_samples_keep: 64
 
 memory_protection:
@@ -221,9 +221,9 @@ Hledání knihovny (`server_meter/sensor/bsec.py`):
 
 | Klíč | Význam | Limit |
 |---|---|---|
-| `max_samples` | max. vzorků v deque | 10–20000, uvnitř ještě `HISTORY_HARD_MAX_SAMPLES = 20000` |
-| `max_age_seconds` | max. stáří | 60–604800 |
-| `min_samples_keep` | podlaha při trimu | 8–1000, menší než `max_samples` |
+| `max_samples` | max. vzorků v deque | 1–2000000 (`HISTORY_HARD_MAX_SAMPLES`). Výchozí 2000000. Není to prealokace. |
+| `max_age_seconds` | max. stáří | `auto` (výchozí) = `max_samples × sensor.interval_seconds`. Explicitní celé číslo ≥ 60 je volitelný kratší kalendářní strop. UI okno „24 hodin“ toto nemění. |
+| `min_samples_keep` | podlaha při trimu | 1–1000, nejvýše `max_samples` |
 
 ### memory_protection
 

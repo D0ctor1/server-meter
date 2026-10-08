@@ -4,7 +4,17 @@ import os
 
 import pytest
 
-from server_meter.config import AppConfig, ConfigError, DEFAULT_LOCALE, load_config
+from pydantic import ValidationError
+
+from server_meter.config import (
+    HISTORY_DEFAULT_MAX_SAMPLES,
+    HISTORY_HARD_MAX_SAMPLES,
+    AppConfig,
+    ConfigError,
+    DEFAULT_LOCALE,
+    HistoryConfig,
+    load_config,
+)
 from tests.conftest import make_config
 
 
@@ -178,6 +188,105 @@ def test_inaccessible_config_directory(tmp_path):
             load_config(cfg)
     finally:
         hidden.chmod(0o700)
+
+
+def test_history_default_max_samples_is_two_million():
+    assert HISTORY_HARD_MAX_SAMPLES == 2_000_000
+    assert HISTORY_DEFAULT_MAX_SAMPLES == 2_000_000
+    assert HistoryConfig().max_samples == 2_000_000
+    assert HistoryConfig().max_age_seconds is None
+
+
+@pytest.mark.parametrize("value", [1, 1000, 100_000, 500_000, 1_000_000, 2_000_000])
+def test_history_max_samples_accepted(value):
+    cfg = HistoryConfig(max_samples=value)
+    assert cfg.max_samples == value
+
+
+@pytest.mark.parametrize("value", [0, -1, 2_000_001, 5_000_000])
+def test_history_max_samples_rejected(value):
+    with pytest.raises(ValidationError):
+        HistoryConfig(max_samples=value)
+
+
+def test_history_max_samples_one_clamps_min_keep():
+    cfg = HistoryConfig(max_samples=1)
+    assert cfg.max_samples == 1
+    assert cfg.min_samples_keep == 1
+
+
+def test_existing_small_max_samples_yaml_still_works():
+    data = make_config().model_dump()
+    data["history"]["max_samples"] = 100_000
+    cfg = AppConfig.model_validate(data)
+    assert cfg.history.max_samples == 100_000
+
+
+def test_legacy_max_samples_10000_is_migrated_on_load(tmp_path):
+    path = tmp_path / "config.yaml"
+    data = make_config().model_dump()
+    data["history"]["max_samples"] = 10_000
+    data["web"]["auth"]["password"] = "KeepPass1"
+    import yaml
+
+    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg.history.max_samples == 2_000_000
+    assert cfg.web.auth.password == "KeepPass1"
+    reloaded = path.read_text(encoding="utf-8")
+    assert "max_samples: 2000000" in reloaded
+    assert "KeepPass1" in reloaded
+    assert "max_samples: 10000" not in reloaded
+
+
+def test_intentional_smaller_max_samples_is_not_migrated(tmp_path):
+    path = tmp_path / "config.yaml"
+    data = make_config().model_dump()
+    data["history"]["max_samples"] = 100_000
+    import yaml
+
+    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg.history.max_samples == 100_000
+    assert "max_samples: 100000" in path.read_text(encoding="utf-8")
+
+
+def test_legacy_max_age_86400_becomes_auto(tmp_path):
+    path = tmp_path / "config.yaml"
+    data = make_config().model_dump()
+    data["history"]["max_samples"] = 2_000_000
+    data["history"]["max_age_seconds"] = 86_400
+    data["web"]["auth"]["password"] = "KeepPass1"
+    import yaml
+
+    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg.history.max_age_seconds is None
+    assert cfg.resolved_history_max_age_seconds() == pytest.approx(2_000_000 * 5)
+    assert cfg.web.auth.password == "KeepPass1"
+    text = path.read_text(encoding="utf-8")
+    assert "max_age_seconds: auto" in text
+    assert "KeepPass1" in text
+
+
+def test_explicit_max_age_other_than_legacy_is_kept(tmp_path):
+    path = tmp_path / "config.yaml"
+    data = make_config().model_dump()
+    data["history"]["max_age_seconds"] = 3600
+    import yaml
+
+    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg.history.max_age_seconds == 3600
+
+
+def test_example_yaml_uses_two_million_cap():
+    from pathlib import Path
+
+    cfg = load_config(Path(__file__).resolve().parent.parent / "config" / "config.example.yaml")
+    assert cfg.history.max_samples == 2_000_000
+    assert cfg.history.max_age_seconds is None
+    assert cfg.resolved_history_max_age_seconds() == pytest.approx(2_000_000 * 5.0)
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses file mode bits")
