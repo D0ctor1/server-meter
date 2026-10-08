@@ -75,6 +75,11 @@ def test_current_and_history_from_ram(client, auth, service):
     assert history["source"] == "ram"
     assert history["persistent"] is False
     assert history["count"] == 1
+    assert history["samples"][0]["bvoc"] == 0.4
+    monitoring = client.get("/api/monitoring", auth=auth).json()
+    assert monitoring["bvoc_ppm"] == 0.4
+    assert monitoring["sensor"]["bvoc"] == 0.4
+    assert monitoring["eco2_ppm"] == 600.0
 
 
 def test_history_since_and_seconds(client, auth, service):

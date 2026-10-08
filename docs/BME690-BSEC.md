@@ -164,11 +164,13 @@ Výchozí `interval_seconds: 5` je s LP v pořádku. `interval_seconds: 1` + `bs
 | raw T/p/RH/gas | 6–9 | °C / hPa / % / Ω |
 | compensated T/RH | 14, 15 | °C / % |
 | `gas_percentage` | 21 | % |
-| `tvoc_equivalent` | 31 | jen LP, volitelné (BSEC 3.3) |
+| `tvoc_equivalent` | 31 | jen LP, volitelné (BSEC 3.3 selectivity / TVOC config) |
 
 `bsec_update_subscription` kód **14** je varování `BSEC_W_SU_SAMPLERATEMISMATCH` (ne fatální chyba). Wrapper kladné kódy bere jako úspěch.
 
-Pokud knihovna TVOC nebo bVOC odmítne, wrapper zopakuje subscribe bez nich. Hodnoty zůstanou `null`.
+**bVOC (id 4) není TVOC (id 31).** Standardní IAQ knihovna + `bme690_iaq_* / bsec_iaq.config` bVOC poskytuje. TVOC vyžaduje selectivity/TVOC konfiguraci; Bosch na ni vrací `BSEC_E_CONFIG_FEATUREMISMATCH` (−35). Wrapper zkouší TVOC zvlášť a při odmítnutí ho zahodí — **bVOC zůstane přihlášený**. Instalátor bere `release_bin/IAQ` (ne `Sel_IAQ`).
+
+Pokud BSEC bVOC samo odmítne, hodnota v JSON zůstane `null`. Aplikace ji nedoráží z IAQ, eCO2 ani gas resistance.
 
 ---
 

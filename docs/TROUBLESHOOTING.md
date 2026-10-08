@@ -176,6 +176,8 @@ Bosch složka: **PiFour_Armv8** / `aarch64-linux-gnu`. `sudo ./install.sh` ofici
 
 Log `bsec_update_subscription failed: 14` je Bosch **varování** (nesoulad vzorkovací frekvence), ne chybějící knihovna. Aplikace ho bere jako úspěch. Postup: [BME690-BSEC.md](BME690-BSEC.md).
 
+Když IAQ a eCO2 jsou čísla, ale bVOC je `null`: TVOC (id 31) nesmí shodit subscribe bVOC (id 4). V logu hledejte `BSEC subscribed outputs` a `breath_voc_equivalent`. Status −35 (`BSEC_E_CONFIG_FEATUREMISMATCH`) patří k TVOC/selectivity, ne k bVOC. Aplikace TVOC zahodí a bVOC ponechá.
+
 YAML:
 
 ```yaml

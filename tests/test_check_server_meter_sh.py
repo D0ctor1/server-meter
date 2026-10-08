@@ -254,6 +254,16 @@ def test_missing_metric_is_unknown(tmp_path):
     assert "secret" not in result.stdout
 
 
+def test_missing_bvoc_is_unknown_not_zero(tmp_path):
+    payload = _payload()
+    payload["bvoc_ppm"] = None
+    result = _check(tmp_path, payload, "bvoc")
+    assert result.returncode == 3
+    assert "unavailable" in result.stdout
+    assert "bvoc=0" not in result.stdout
+    assert "secret" not in result.stdout
+
+
 def test_unknown_metric_is_unknown(tmp_path):
     result = _check(tmp_path, _payload(), "xyz")
     assert result.returncode == 3
