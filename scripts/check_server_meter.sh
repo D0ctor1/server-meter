@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Nagios Core plugin for server-meter.
 # One script, many services: check_server_meter.sh [metric]
 # No argument (or "health") is the overall health check.
@@ -7,6 +7,7 @@
 #
 # This file holds the HTTP password. Install it mode 0700 owned by the Nagios
 # plugin user (typically nagios:nagios). Never enable shell tracing.
+set +o xtrace
 
 # === server-meter plugin configuration ===
 SERVER_METER_URL="http://192.168.1.50:8080"
@@ -30,7 +31,7 @@ BVOC_WARNING=1.0
 BVOC_CRITICAL=2.0
 CPU_TEMP_WARNING=70
 CPU_TEMP_CRITICAL=80
-CPU_LOAD_WARNING=85
+CPU_LOAD_WARNING=80
 CPU_LOAD_CRITICAL=95
 RAM_WARNING=85
 RAM_CRITICAL=95
@@ -266,7 +267,7 @@ emit_high() {
   label=$6
   digits=$7
   if [ -z "$value" ] || [ "$value" = "null" ] || ! is_number "$value"; then
-    finish "$STATE_UNKNOWN" "UNKNOWN - $title is not available"
+    finish "$STATE_UNKNOWN" "UNKNOWN - $title unavailable"
   fi
   shown=$(fmt "$value" "$digits")
   warn_s=""
@@ -301,7 +302,7 @@ emit_info() {
   label=$4
   digits=$5
   if [ -z "$value" ] || [ "$value" = "null" ] || ! is_number "$value"; then
-    finish "$STATE_UNKNOWN" "UNKNOWN - $title is not available"
+    finish "$STATE_UNKNOWN" "UNKNOWN - $title unavailable"
   fi
   shown=$(fmt "$value" "$digits")
   unit_txt=""
@@ -399,7 +400,7 @@ check_sensor() {
     shown=$(fmt "$age" 0)
     perf="sensor_age=$shown;$warn;$crit"
     if is_number "$crit" && ge "$age" "$crit"; then
-      finish "$STATE_CRITICAL" "CRITICAL - BME690 data too old: $shown seconds | $perf"
+      finish "$STATE_CRITICAL" "CRITICAL - BME690 sensor data stale (age=$shown) | $perf"
     fi
     if is_number "$warn" && ge "$age" "$warn"; then
       finish "$STATE_WARNING" "WARNING - BME690 data age=$shown seconds (warning >= $warn s) | $perf"
@@ -409,13 +410,25 @@ check_sensor() {
   finish "$STATE_OK" "OK - BME690 sensor available"
 }
 
+require_sensor_sample() {
+  available=$(json_bool "$body" sensor_available)
+  age=$(json_number "$body" sensor_age_seconds)
+  if [ "$available" != "true" ]; then
+    finish "$STATE_CRITICAL" "CRITICAL - BME690 sensor unavailable"
+  fi
+  if is_number "$age" && is_number "$SENSOR_AGE_CRITICAL" && ge "$age" "$SENSOR_AGE_CRITICAL"; then
+    shown=$(fmt "$age" 0)
+    finish "$STATE_CRITICAL" "CRITICAL - BME690 sensor data stale (age=$shown)"
+  fi
+}
+
 check_accuracy() {
   title=$1
   key=$2
   label=$3
   value=$(json_number "$body" "$key")
   if [ -z "$value" ] || [ "$value" = "null" ] || ! is_number "$value"; then
-    finish "$STATE_UNKNOWN" "UNKNOWN - $title is not available"
+    finish "$STATE_UNKNOWN" "UNKNOWN - $title unavailable"
   fi
   shown=$(fmt "$value" 0)
   if ge "$value" 2; then
@@ -432,38 +445,48 @@ case "$METRIC" in
     check_health
     ;;
   temperature)
+    require_sensor_sample
     emit_high "BME690 temperature" "$(json_number "$body" temperature_c)" "C" \
       "$TEMP_WARNING" "$TEMP_CRITICAL" temperature 1
     ;;
   humidity)
+    require_sensor_sample
     emit_high "BME690 humidity" "$(json_number "$body" humidity_percent)" "%" \
       "$HUMIDITY_WARNING" "$HUMIDITY_CRITICAL" humidity 1
     ;;
   pressure)
+    require_sensor_sample
     emit_info "BME690 pressure" "$(json_number "$body" pressure_hpa)" "hPa" pressure 1
     ;;
   gas_resistance)
+    require_sensor_sample
     emit_info "BME690 gas resistance" "$(json_number "$body" gas_resistance_ohm)" "Ohm" gas_resistance 0
     ;;
   iaq)
+    require_sensor_sample
     emit_high "BME690 IAQ" "$(json_number "$body" iaq)" "" \
       "$IAQ_WARNING" "$IAQ_CRITICAL" iaq 1
     ;;
   iaq_accuracy)
+    require_sensor_sample
     check_accuracy "BME690 IAQ accuracy" iaq_accuracy iaq_accuracy
     ;;
   static_iaq)
-    emit_high "BME690 static IAQ" "$(json_number "$body" static_iaq)" "" \
+    require_sensor_sample
+    emit_high "BME690 Static IAQ" "$(json_number "$body" static_iaq)" "" \
       "$IAQ_WARNING" "$IAQ_CRITICAL" static_iaq 1
     ;;
   static_iaq_accuracy)
-    check_accuracy "BME690 static IAQ accuracy" static_iaq_accuracy static_iaq_accuracy
+    require_sensor_sample
+    check_accuracy "BME690 Static IAQ accuracy" static_iaq_accuracy static_iaq_accuracy
     ;;
   eco2)
+    require_sensor_sample
     emit_high "BME690 eCO2" "$(json_number "$body" eco2_ppm)" "ppm" \
       "$ECO2_WARNING" "$ECO2_CRITICAL" eco2 0
     ;;
   bvoc)
+    require_sensor_sample
     emit_high "BME690 bVOC" "$(json_number "$body" bvoc_ppm)" "ppm" \
       "$BVOC_WARNING" "$BVOC_CRITICAL" bvoc 2
     ;;
@@ -483,6 +506,6 @@ case "$METRIC" in
     check_sensor
     ;;
   *)
-    finish "$STATE_UNKNOWN" "UNKNOWN - unknown metric '$METRIC'. See --help."
+    finish "$STATE_UNKNOWN" "UNKNOWN - unknown metric: $METRIC"
     ;;
 esac

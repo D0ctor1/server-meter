@@ -115,7 +115,7 @@ sudo ./uninstall.sh
 - Settings (gear, **admin** only) for users, SMTP, thresholds, diagnostics, config export (secrets REDACTED), optional Nagios monitoring token
 - SQLite for accounts and alarm history only; **sensor samples stay in RAM**
 - REST API including language-neutral `GET /api/monitoring` and liveness `GET /api/health` (`{"status":"healthy"}`)
-- Nagios Core 4.4.5: one self-contained `check_server_meter.sh` (curl only; no extra plugin config file). `$ARG1$` selects the metric; no argument remains the overall health check
+- Nagios Core 4.4.5: one self-contained **bash** plugin `check_server_meter.sh` (curl + awk; no extra plugin config file, no Python on the Nagios host). `$ARG1$` selects the metric; no argument remains the overall health check
 - RAM protection trims oldest samples under memory pressure and never writes them to the SD card
 
 ## Nagios Core 4.4.5
@@ -234,7 +234,7 @@ Exit codes: `0` OK, `1` WARNING, `2` CRITICAL (including unreachable HTTP), `3` 
 
 The plugin never writes JSON, cache or sensor history to disk.
 
-Legacy `GET /api/nagios/check` and `scripts/check_server_meter.py` still exist for older setups.
+Do **not** copy `scripts/check_server_meter.py` over `check_server_meter.sh`. The live plugin must start with `#!/bin/bash`. The `.py` helper is legacy only (needs Python 3; Nagios Core 4.4.5 hosts often have Python 2.7).
 
 ## Bosch BSEC (IAQ)
 

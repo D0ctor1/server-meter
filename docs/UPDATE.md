@@ -168,16 +168,9 @@ sudo ./scripts/install_nagios_plugin.sh
 echo $?
 ```
 
-Instalátor aktualizuje plugin (ponechá URL/heslo) i `server-meter.cfg`. Po `nagios -v` provede reload jen při platné konfiguraci.
+Instalátor aktualizuje bash plugin `check_server_meter.sh` (ponechá URL/heslo) i `server-meter.cfg`. Pokud je na místě Python soubor pojmenovaný `.sh`, nahradí ho bash pluginem. Po `nagios -v` provede reload jen při platné konfiguraci.
 
-Legacy:
-
-```bash
-/usr/local/nagios/libexec/check_server_meter.py \
-  --url http://RPI_IP:8080/api/nagios/check \
-  --user admin \
-  --password 'YOUR_PASSWORD'
-```
+Nepoužívejte `check_server_meter.py` jako náhradu `.sh` pluginu.
 
 ---
 
