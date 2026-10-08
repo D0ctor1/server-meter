@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import subprocess
 
+from fastapi.testclient import TestClient
+
 from server_meter.models.measurement import Measurement, SensorStatus
 
 # Keep in sync with install.sh test_api() grep of `curl -D -` output.
@@ -88,6 +90,41 @@ def test_history_since_and_seconds(client, auth, service):
         service.buffer.append(Measurement(timestamp=ts, temperature=ts / 10.0))
     payload = client.get("/api/history?since=150", auth=auth).json()
     assert [s["timestamp"] for s in payload["samples"]] == [200.0, 300.0]
+
+
+def test_history_default_limit_does_not_dump_entire_ring():
+    from server_meter.app import create_app
+    from server_meter.config import AppConfig
+    from server_meter.service import MeterService
+    from tests.conftest import make_config
+
+    data = make_config().model_dump()
+    data["history"]["max_samples"] = 5000
+    data["history"]["max_age_seconds"] = 86_400
+    cfg = AppConfig.model_validate(data)
+    service = MeterService(cfg)
+    now = 1_700_000_000.0
+    for i in range(3000):
+        service.buffer.append(Measurement(timestamp=now + i, temperature=float(i)))
+    app = create_app(cfg, service=service)
+    with TestClient(app) as test_client:
+        auth = ("admin", "secret123")
+        payload = test_client.get("/api/history", auth=auth).json()
+        assert payload["persistent"] is False
+        assert payload["source"] == "ram"
+        assert payload["count"] == 2000
+        assert len(payload["samples"]) == 2000
+        assert payload["samples"][0]["temperature"] == 1000.0
+        assert payload["samples"][-1]["temperature"] == 2999.0
+        down = test_client.get("/api/history?max_points=12", auth=auth).json()
+        assert down["count"] == 12
+        assert down["downsampled"] is True
+        assert down["samples"][0]["temperature"] == 0.0
+        assert down["samples"][-1]["temperature"] == 2999.0
+        too_big = test_client.get("/api/history?limit=10001", auth=auth)
+        assert too_big.status_code == 422
+        too_points = test_client.get("/api/history?max_points=10001", auth=auth)
+        assert too_points.status_code == 422
 
 
 def test_sensor_unavailable_does_not_fail_api(client, auth, service):

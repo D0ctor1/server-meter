@@ -14,7 +14,16 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, field_validator, model_validator
 
 # Absolute hard cap: even a broken YAML cannot grow RAM without bound.
-HISTORY_HARD_MAX_SAMPLES = 20_000
+# This is a ceiling, not a preallocation. The deque grows with real samples.
+HISTORY_HARD_MAX_SAMPLES = 2_000_000
+HISTORY_DEFAULT_MAX_SAMPLES = 2_000_000
+HISTORY_MIN_SAMPLES = 1
+# 2_000_000 samples at the 5 s sensor interval need ~116 days of age.
+HISTORY_MAX_AGE_SECONDS = 180 * 24 * 3600
+HISTORY_DEFAULT_MAX_AGE_SECONDS = 86_400
+# HTTP /api/history never dumps the whole ring to the client by default.
+HISTORY_API_DEFAULT_LIMIT = 2_000
+HISTORY_API_MAX_LIMIT = 10_000
 DEFAULT_PASSWORD_PLACEHOLDER = "CHANGE_ME"
 VALID_I2C_ADDRESSES = {0x76, 0x77}
 SUPPORTED_LOCALES = ("CZ", "EN")
@@ -128,16 +137,24 @@ class SensorConfig(BaseModel):
 class HistoryConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    max_samples: int = Field(default=10_000, ge=10, le=HISTORY_HARD_MAX_SAMPLES)
-    max_age_seconds: int = Field(default=86_400, ge=60, le=7 * 24 * 3600)
-    min_samples_keep: int = Field(default=64, ge=8, le=1000)
+    max_samples: int = Field(
+        default=HISTORY_DEFAULT_MAX_SAMPLES,
+        ge=HISTORY_MIN_SAMPLES,
+        le=HISTORY_HARD_MAX_SAMPLES,
+    )
+    max_age_seconds: int = Field(
+        default=HISTORY_DEFAULT_MAX_AGE_SECONDS,
+        ge=60,
+        le=HISTORY_MAX_AGE_SECONDS,
+    )
+    min_samples_keep: int = Field(default=64, ge=1, le=1000)
 
     @model_validator(mode="after")
-    def cap_hard_limit(self) -> HistoryConfig:
-        if self.max_samples > HISTORY_HARD_MAX_SAMPLES:
-            object.__setattr__(self, "max_samples", HISTORY_HARD_MAX_SAMPLES)
-        if self.min_samples_keep >= self.max_samples:
-            raise ValueError("history.min_samples_keep must be smaller than max_samples")
+    def cap_keep_below_max(self) -> HistoryConfig:
+        # Small max_samples (including 1) stays valid; keep cannot exceed the ring.
+        keep = min(self.min_samples_keep, self.max_samples)
+        if keep != self.min_samples_keep:
+            object.__setattr__(self, "min_samples_keep", keep)
         return self
 
 

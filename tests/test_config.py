@@ -4,7 +4,17 @@ import os
 
 import pytest
 
-from server_meter.config import AppConfig, ConfigError, DEFAULT_LOCALE, load_config
+from pydantic import ValidationError
+
+from server_meter.config import (
+    HISTORY_DEFAULT_MAX_SAMPLES,
+    HISTORY_HARD_MAX_SAMPLES,
+    AppConfig,
+    ConfigError,
+    DEFAULT_LOCALE,
+    HistoryConfig,
+    load_config,
+)
 from tests.conftest import make_config
 
 
@@ -178,6 +188,45 @@ def test_inaccessible_config_directory(tmp_path):
             load_config(cfg)
     finally:
         hidden.chmod(0o700)
+
+
+def test_history_default_max_samples_is_two_million():
+    assert HISTORY_HARD_MAX_SAMPLES == 2_000_000
+    assert HISTORY_DEFAULT_MAX_SAMPLES == 2_000_000
+    assert HistoryConfig().max_samples == 2_000_000
+
+
+@pytest.mark.parametrize("value", [1, 1000, 100_000, 500_000, 1_000_000, 2_000_000])
+def test_history_max_samples_accepted(value):
+    cfg = HistoryConfig(max_samples=value)
+    assert cfg.max_samples == value
+
+
+@pytest.mark.parametrize("value", [0, -1, 2_000_001, 5_000_000])
+def test_history_max_samples_rejected(value):
+    with pytest.raises(ValidationError):
+        HistoryConfig(max_samples=value)
+
+
+def test_history_max_samples_one_clamps_min_keep():
+    cfg = HistoryConfig(max_samples=1)
+    assert cfg.max_samples == 1
+    assert cfg.min_samples_keep == 1
+
+
+def test_existing_small_max_samples_yaml_still_works():
+    data = make_config().model_dump()
+    data["history"]["max_samples"] = 100_000
+    cfg = AppConfig.model_validate(data)
+    assert cfg.history.max_samples == 100_000
+
+
+def test_example_yaml_uses_two_million_cap():
+    from pathlib import Path
+
+    cfg = load_config(Path(__file__).resolve().parent.parent / "config" / "config.example.yaml")
+    assert cfg.history.max_samples == 2_000_000
+    assert cfg.history.max_age_seconds == 86_400
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses file mode bits")

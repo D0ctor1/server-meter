@@ -53,7 +53,9 @@ sensor:
     persist_state: false
 
 history:
-  max_samples: 10000
+  # RAM-only ring buffer. Grows with real samples; not preallocated at start.
+  # Absolute maximum is 2000000. Smaller values remain valid.
+  max_samples: 2000000
   max_age_seconds: 86400
   min_samples_keep: 64
 

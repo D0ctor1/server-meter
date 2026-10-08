@@ -212,11 +212,12 @@ HTTP Basic Auth.
 
 | Parametr | Typ | Omezení | Význam |
 |---|---|---|---|
-| `seconds` | float | `> 0` a `≤ 604800` | vzorky za posledních N sekund |
-| `limit` | int | `1`–`20000` | nejvýše N **nejnovějších** po filtrování |
+| `seconds` | float | `> 0` a `≤ 15552000` | vzorky za posledních N sekund |
+| `limit` | int | `1`–`10000` | nejvýše N **nejnovějších** po filtrování |
 | `since` | float | unix time | vzorky s `timestamp > since` |
+| `max_points` | int | `1`–`10000` | rovnoměrný downsample filtrovaného okna (zachová tvar) |
 
-`seconds` má přednost před `since` (`RamBuffer.snapshot`). Bez parametrů se vrací celý buffer (až `history.max_samples`, tvrdý strop 20000).
+`seconds` má přednost před `since` (`RamBuffer.snapshot`). `max_points` má přednost před `limit`. Bez `limit` i `max_points` se vrací nejvýše 2000 nejnovějších vzorků — API nikdy nepošle automaticky 2 miliony bodů. Grafy používají `max_points=720`.
 
 Neplatný parametr (např. `limit=0`) → HTTP **422**.
 
@@ -311,7 +312,7 @@ HTTP **200**. Příklad (čísla se liší):
     "i2c_address": "0x76",
     "interval_seconds": 5.0,
     "bsec_enabled": true,
-    "history_max_samples": 10000,
+    "history_max_samples": 2000000,
     "history_max_age_seconds": 86400,
     "memory_protection": true,
     "api_docs_enabled": false,
@@ -344,8 +345,8 @@ HTTP **200**. Příklad (čísla se liší):
   },
   "history": {
     "samples": 20,
-    "max_samples": 10000,
-    "hard_max_samples": 20000,
+    "max_samples": 2000000,
+    "hard_max_samples": 2000000,
     "max_age_seconds": 86400.0,
     "dropped_oldest": 0,
     "trim_events": 0,

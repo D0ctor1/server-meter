@@ -60,6 +60,21 @@ def test_emergency_trims_oldest_first():
     assert temps[-1] == 99.0
 
 
+def test_two_million_cap_still_trims_oldest_under_pressure():
+    cfg = MemoryProtectionConfig(check_interval_seconds=5)
+    buf = RamBuffer(max_samples=2_000_000, max_age_seconds=10_000, min_samples_keep=8)
+    for i in range(200):
+        buf.append(Measurement(timestamp=float(i), temperature=float(i)))
+    prot = MemoryProtector(cfg, buf, FakeSystem(95))
+    snap = prot.maybe_protect(now=100.0)
+    assert snap.pressure is MemoryPressure.EMERGENCY
+    assert snap.trimmed > 0
+    assert len(buf) < 200
+    temps = [s.temperature for s in buf.snapshot()]
+    assert temps[-1] == 199.0
+    assert temps == list(range(200 - len(temps), 200))
+
+
 def test_disabled_does_not_trim():
     cfg = MemoryProtectionConfig(enabled=False, check_interval_seconds=5)
     buf = _buffer(40)

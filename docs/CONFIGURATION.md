@@ -72,7 +72,7 @@ sensor:
     persist_state: false
 
 history:
-  max_samples: 10000
+  max_samples: 2000000
   max_age_seconds: 86400
   min_samples_keep: 64
 
@@ -221,9 +221,9 @@ Hledání knihovny (`server_meter/sensor/bsec.py`):
 
 | Klíč | Význam | Limit |
 |---|---|---|
-| `max_samples` | max. vzorků v deque | 10–20000, uvnitř ještě `HISTORY_HARD_MAX_SAMPLES = 20000` |
-| `max_age_seconds` | max. stáří | 60–604800 |
-| `min_samples_keep` | podlaha při trimu | 8–1000, menší než `max_samples` |
+| `max_samples` | max. vzorků v deque | 1–2000000 (`HISTORY_HARD_MAX_SAMPLES`). Výchozí 2000000. Není to prealokace. |
+| `max_age_seconds` | max. stáří | 60–15552000 (180 dní). Výchozí 86400. |
+| `min_samples_keep` | podlaha při trimu | 1–1000, nejvýše `max_samples` |
 
 ### memory_protection
 

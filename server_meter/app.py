@@ -23,7 +23,7 @@ from server_meter.config import AppConfig
 from server_meter.service import MeterService
 from server_meter.users import UserStore, migrate_yaml_admin, resolve_users_db_path
 
-WEB_ASSET_VERSION = f"{__version__}.ui8"
+WEB_ASSET_VERSION = f"{__version__}.ui9"
 
 
 def resolve_web_root() -> Path:

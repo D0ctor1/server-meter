@@ -600,7 +600,9 @@
         [t("diag.sensor_age"), status.sensor && status.sensor.age_seconds != null
           ? i18n.formatDuration(status.sensor.age_seconds)
           : "—"],
-        [t("diag.history_samples"), status.history ? status.history.samples : "—"],
+        [t("diag.history_samples"), status.history
+          ? `${status.history.samples} / ${status.history.max_samples}`
+          : "—"],
         [t("diag.ram_history"), status.history ? fmtMem(status.history.memory_bytes) : "—"],
         [t("diag.ram_protection_status"), ramProt.status || ramProt.pressure || "—"],
         [t("diag.iaq_accuracy"), current && current.iaq_accuracy != null ? String(current.iaq_accuracy) : "—"],

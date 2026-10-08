@@ -89,10 +89,12 @@ Kód: `server_meter/storage/ram_buffer.py`, `server_meter/monitoring/memory.py`.
 
 | YAML | Význam | Výchozí |
 |---|---|---|
-| `history.max_samples` | kapacita deque | 10000 |
+| `history.max_samples` | kapacita deque (roste podle skutečných vzorků) | 2000000 |
 | `history.max_age_seconds` | starší vzorky se maže | 86400 (24 h) |
 | `history.min_samples_keep` | spodní mez při trimu | 64 |
-| tvrdý strop v kódu | `HISTORY_HARD_MAX_SAMPLES` | **20000** |
+| tvrdý strop v kódu | `HISTORY_HARD_MAX_SAMPLES` | **2000000** |
+
+`max_samples` je strop, ne alokace při startu. Menší hodnota (např. 100000) zůstává platná. Hodnota `> 2000000` se odmítne. Při intervalu 5 s a výchozím `max_age_seconds: 86400` se v praxi vejde ~17280 vzorků; 2 miliony vyžadují delší `max_age_seconds` (až 180 dní).
 
 Přetečení `max_samples`: deque zahodí **nejstarší** vzorek. Nikam se neukládá.
 
@@ -147,7 +149,7 @@ Největší procesy:
 ps aux --sort=-%mem | head
 ```
 
-Hledejte `python -m server_meter`. RSS desítky MB je běžné; stovky MB při 10k vzorcích stále bez zápisu historie na disk.
+Hledejte `python -m server_meter`. RSS desítky MB je běžné. Plný strop 2 000 000 vzorků je řádově ~1 GB RAM; memory protection maže nejstarší vzorky dřív, než dojde k OOM. Historie se na disk nezapisuje. Webový graf stahuje nejvýše stovky bodů (`max_points`), ne celý buffer.
 
 Z API:
 

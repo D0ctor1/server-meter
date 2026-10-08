@@ -305,7 +305,7 @@ curl -u admin:YOUR_PASSWORD http://127.0.0.1:8080/api/status
 
 Sledujte `memory.pressure` a `history.samples`. Při warning/critical/emergency se maže **nejstarší** historie, ne odkládá na SD. Viz [STORAGE-POLICY.md](STORAGE-POLICY.md).
 
-Snižte `history.max_samples` a restartujte službu (nový limit platí po startu).
+Snižte `history.max_samples` (maximum je 2000000, menší hodnota je platná) a restartujte službu (nový limit platí po startu). Memory protection maže nejstarší vzorky při vysokém RAM%. Historie se na SD nezapisuje.
 
 ---
 
