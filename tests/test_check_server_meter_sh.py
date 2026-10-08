@@ -33,6 +33,7 @@ def _payload(overall: str = "OK", **overrides) -> dict:
         "static_iaq_accuracy": 3,
         "eco2_ppm": 650,
         "bvoc_ppm": 0.4,
+        "tvoc_ppb": 220,
         "cpu_temperature_c": 48.2,
         "cpu_load_percent": 10.0,
         "ram_used_percent": 32.0,
@@ -313,6 +314,7 @@ def test_plugin_help_and_change_me_password():
         "static_iaq_accuracy",
         "eco2",
         "bvoc",
+        "tvoc",
         "cpu_temperature",
         "cpu_load",
         "ram",
@@ -365,7 +367,9 @@ def test_object_cfg_has_one_command_and_per_metric_services():
     assert "RAM Usage" in text
     assert "Sensor Availability" in text
     assert "service_description     Server Meter\n" not in text
-    assert text.count("define service") == 15
+    assert "check_server_meter!tvoc" in text
+    assert "BME690 TVOC" in text
+    assert text.count("define service") == 16
     assert "check_server_meter_2" not in text
 
 
@@ -426,7 +430,7 @@ def test_installer_writes_objects_once(tmp_path):
     assert [p.name for p in files] == ["server-meter.cfg"]
     text = (objects / "server-meter.cfg").read_text(encoding="utf-8")
     assert text.count("define command") == 1
-    assert text.count("define service") == 15
+    assert text.count("define service") == 16
     assert "10.1.2.3" in text
     assert str(plugin_dir / "check_server_meter.sh") in text
     assert "$ARG1$" in text
@@ -465,6 +469,7 @@ def test_plugin_metrics_ok_or_unknown(tmp_path):
         "gas_resistance": ("gas_resistance=123456", 0),
         "eco2": ("eco2=650;1500;2500", 0),
         "bvoc": ("bvoc=0.40;1.0;2.0", 0),
+        "tvoc": ("tvoc=220", 0),
         "cpu_load": ("cpu_load=10.0;80;95", 0),
         "static_iaq": ("static_iaq=41.5;150;250", 0),
     }
@@ -490,6 +495,7 @@ def test_all_arguments_and_single_perfdata(tmp_path):
         "static_iaq_accuracy": "static_iaq_accuracy=",
         "eco2": "eco2=",
         "bvoc": "bvoc=",
+        "tvoc": "tvoc=",
         "cpu_temperature": "cpu_temperature=",
         "cpu_load": "cpu_load=",
         "ram": "ram=",
@@ -527,6 +533,7 @@ def test_sensor_unavailable_fails_bme_metrics(tmp_path):
         "static_iaq_accuracy",
         "eco2",
         "bvoc",
+        "tvoc",
         "sensor",
     ):
         result = _check(tmp_path, payload, metric)

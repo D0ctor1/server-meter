@@ -84,6 +84,7 @@ Metrics:
   static_iaq_accuracy
   eco2
   bvoc
+  tvoc
   cpu_temperature
   cpu_load
   ram
@@ -366,6 +367,7 @@ check_health() {
   add_item static_iaq_accuracy "$(json_number "$body" static_iaq_accuracy)" "" "" "" static_iaq_accuracy
   add_item eco2 "$(json_number "$body" eco2_ppm)" "ppm" "$(json_number "$body" eco2_warning)" "$(json_number "$body" eco2_critical)" eco2
   add_item bvoc "$(json_number "$body" bvoc_ppm)" "ppm" "$(json_number "$body" bvoc_warning)" "$(json_number "$body" bvoc_critical)" bvoc
+  add_item tvoc "$(json_number "$body" tvoc_ppb)" "ppb" "" "" tvoc
   add_item cpu_temp "$(json_number "$body" cpu_temperature_c)" "C" "$(json_number "$body" cpu_temperature_warning)" "$(json_number "$body" cpu_temperature_critical)" cpu_temp
   add_item cpu_load "$(json_number "$body" cpu_load_percent)" "%" "" "" cpu_load
   add_item ram "$(json_number "$body" ram_used_percent)" "%" "$(json_number "$body" ram_warning)" "$(json_number "$body" ram_critical)" ram
@@ -489,6 +491,10 @@ case "$METRIC" in
     require_sensor_sample
     emit_high "BME690 bVOC" "$(json_number "$body" bvoc_ppm)" "ppm" \
       "$BVOC_WARNING" "$BVOC_CRITICAL" bvoc 2
+    ;;
+  tvoc)
+    require_sensor_sample
+    emit_info "BME690 TVOC" "$(json_number "$body" tvoc_ppb)" "ppb" tvoc 0
     ;;
   cpu_temperature)
     emit_high "CPU temperature" "$(json_number "$body" cpu_temperature_c)" "C" \

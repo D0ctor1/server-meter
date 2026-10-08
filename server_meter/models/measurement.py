@@ -65,6 +65,7 @@ class Measurement:
         payload["sensor_status"] = self.sensor_status.value
         payload["eco2"] = self.co2_equivalent
         payload["bvoc"] = self.breath_voc_equivalent
+        payload["tvoc"] = self.tvoc_equivalent
         return payload
 
     def numeric_fields(self) -> dict[str, float | int | None]:

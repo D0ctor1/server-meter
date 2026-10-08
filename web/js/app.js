@@ -17,6 +17,7 @@
     { key: "static_iaq_accuracy", labelKey: "sensor.static_iaq_accuracy", helpKey: "sensor.help.static_iaq_accuracy", unit: "", digits: 0 },
     { key: "eco2", labelKey: "sensor.eco2", helpKey: "sensor.help.eco2", unit: "ppm", digits: 0 },
     { key: "bvoc", labelKey: "sensor.bvoc", helpKey: "sensor.help.bvoc", unit: "ppm", digits: 3 },
+    { key: "tvoc", labelKey: "sensor.tvoc", helpKey: "sensor.help.tvoc", unit: "ppb", digits: 0 },
   ];
 
   const CHARTS = [
@@ -28,6 +29,7 @@
     { key: "static_iaq", labelKey: "sensor.static_iaq", helpKey: "sensor.help.static_iaq", unit: "IAQ" },
     { key: "eco2", labelKey: "sensor.eco2", helpKey: "sensor.help.eco2", unit: "ppm" },
     { key: "bvoc", labelKey: "sensor.bvoc", helpKey: "sensor.help.bvoc", unit: "ppm" },
+    { key: "tvoc", labelKey: "sensor.tvoc", helpKey: "sensor.help.tvoc", unit: "ppb" },
     { key: "cpu_temperature", labelKey: "system.cpu_temperature", unit: "°C" },
     { key: "cpu_load", labelKey: "system.cpu_load", unit: "%" },
     { key: "ram_usage", labelKey: "system.ram_usage", unit: "%" },

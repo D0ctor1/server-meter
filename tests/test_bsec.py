@@ -35,37 +35,41 @@ def test_tvoc_id_matches_bsec_3_3():
     assert BSEC_E_CONFIG_FEATUREMISMATCH == -35
 
 
-def test_subscription_attempts_keep_bvoc_without_tvoc():
+def test_subscription_attempts_match_bsec_3_3_iaq_example():
     lp = bsec_subscription_attempts("lp")
-    assert BSEC_OUTPUT_TVOC_EQUIVALENT in lp[0]
-    assert BSEC_OUTPUT_BREATH_VOC_EQUIVALENT in lp[0]
-    assert BSEC_OUTPUT_BREATH_VOC_EQUIVALENT in lp[1]
-    assert BSEC_OUTPUT_TVOC_EQUIVALENT not in lp[1]
+    tvoc_without_bvoc = [
+        attempt
+        for attempt in lp
+        if BSEC_OUTPUT_TVOC_EQUIVALENT in attempt and BSEC_OUTPUT_BREATH_VOC_EQUIVALENT not in attempt
+    ]
+    assert tvoc_without_bvoc, "Bosch 3.3 IAQ LP example subscribes TVOC without breath-VOC"
+    assert BSEC_OUTPUT_IAQ in tvoc_without_bvoc[0]
+    assert BSEC_OUTPUT_CO2_EQUIVALENT in tvoc_without_bvoc[0]
     ulp = bsec_subscription_attempts("ulp")
     assert all(BSEC_OUTPUT_TVOC_EQUIVALENT not in attempt for attempt in ulp)
-    assert BSEC_OUTPUT_BREATH_VOC_EQUIVALENT in ulp[0]
 
 
-def test_subscribe_keeps_bvoc_when_tvoc_is_rejected():
+def test_subscribe_keeps_tvoc_when_bvoc_is_rejected():
     processor = BsecProcessor(BsecConfig(sample_rate="lp"))
     calls: list[list[int]] = []
 
     def _fake(_lib, output_ids, _rate):
         ids = list(output_ids)
         calls.append(ids)
-        if BSEC_OUTPUT_TVOC_EQUIVALENT in ids:
+        if BSEC_OUTPUT_BREATH_VOC_EQUIVALENT in ids:
             return BSEC_E_CONFIG_FEATUREMISMATCH
         return 0
 
     processor._try_subscribe = _fake  # type: ignore[method-assign]
     processor._subscribe(lib=None)  # type: ignore[arg-type]
     assert calls, "subscription must be attempted"
-    assert BSEC_OUTPUT_TVOC_EQUIVALENT in calls[0]
-    assert BSEC_OUTPUT_BREATH_VOC_EQUIVALENT in processor.subscribed_ids
-    assert BSEC_OUTPUT_TVOC_EQUIVALENT not in processor.subscribed_ids
+    assert BSEC_OUTPUT_BREATH_VOC_EQUIVALENT in calls[0]
+    assert BSEC_OUTPUT_TVOC_EQUIVALENT in processor.subscribed_ids
+    assert BSEC_OUTPUT_BREATH_VOC_EQUIVALENT not in processor.subscribed_ids
     assert BSEC_OUTPUT_IAQ in processor.subscribed_ids
     assert BSEC_OUTPUT_CO2_EQUIVALENT in processor.subscribed_ids
-    assert "breath_voc_equivalent" in processor.subscribed_output_names
+    assert "tvoc_equivalent" in processor.subscribed_output_names
+    assert "breath_voc_equivalent" not in processor.subscribed_output_names
 
 
 def test_apply_bsec_copies_breath_voc_without_inventing_zero():

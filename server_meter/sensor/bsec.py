@@ -97,18 +97,19 @@ BSEC_OUTPUT_NAMES = {
     BSEC_OUTPUT_TVOC_EQUIVALENT: "tvoc_equivalent",
 }
 
-# Standard IAQ virtual sensors. Breath-VOC (id 4) belongs here; TVOC (id 31) does not.
-BSEC_IAQ_OUTPUTS = [
-    BSEC_OUTPUT_IAQ,
-    BSEC_OUTPUT_STATIC_IAQ,
-    BSEC_OUTPUT_CO2_EQUIVALENT,
-    BSEC_OUTPUT_BREATH_VOC_EQUIVALENT,
-    BSEC_OUTPUT_RAW_TEMPERATURE,
+# Official BSEC 3.3.0.1 IAQ example (bsec_integration.c, OUTPUT_MODE == IAQ).
+# Breath-VOC (id 4, ppm) is in the enum and OUTPUT_INCLUDED bitfield, but the
+# Bosch example does not subscribe it. LP adds TVOC equivalent (id 31, ppb).
+BSEC_IAQ_EXAMPLE_OUTPUTS = [
     BSEC_OUTPUT_RAW_PRESSURE,
+    BSEC_OUTPUT_RAW_TEMPERATURE,
     BSEC_OUTPUT_RAW_HUMIDITY,
     BSEC_OUTPUT_RAW_GAS,
+    BSEC_OUTPUT_IAQ,
     BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE,
     BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY,
+    BSEC_OUTPUT_STATIC_IAQ,
+    BSEC_OUTPUT_CO2_EQUIVALENT,
     BSEC_OUTPUT_STABILIZATION_STATUS,
     BSEC_OUTPUT_RUN_IN_STATUS,
     BSEC_OUTPUT_GAS_PERCENTAGE,
@@ -116,29 +117,20 @@ BSEC_IAQ_OUTPUTS = [
 
 
 def bsec_subscription_attempts(sample_rate: str) -> list[list[int]]:
-    """Ordered subscribe lists. TVOC is tried first, then dropped alone.
+    """Subscribe like Bosch 3.3 IAQ, then try legacy bVOC without dropping TVOC.
 
-    Bundling TVOC with bVOC made standard IAQ configs return
-    BSEC_E_CONFIG_FEATUREMISMATCH (-35) and drop breath-VOC as well.
+    Live BSEC 3.3.0.1 IAQ rejected id 4 when it was in the same set. TVOC (id 31)
+    must still be attempted on the official 12-output list without breath-VOC.
     """
-    iaq = list(BSEC_IAQ_OUTPUTS)
-    without_bvoc = [sid for sid in iaq if sid != BSEC_OUTPUT_BREATH_VOC_EQUIVALENT]
-    core = [
-        BSEC_OUTPUT_IAQ,
-        BSEC_OUTPUT_STATIC_IAQ,
-        BSEC_OUTPUT_CO2_EQUIVALENT,
-        BSEC_OUTPUT_BREATH_VOC_EQUIVALENT,
-        BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE,
-        BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY,
-        BSEC_OUTPUT_STABILIZATION_STATUS,
-        BSEC_OUTPUT_RUN_IN_STATUS,
-    ]
+    base = list(BSEC_IAQ_EXAMPLE_OUTPUTS)
     attempts: list[list[int]] = []
     if sample_rate == "lp":
-        attempts.append(iaq + [BSEC_OUTPUT_TVOC_EQUIVALENT])
-    attempts.append(iaq)
-    attempts.append(without_bvoc)
-    attempts.append(core)
+        attempts.append(base + [BSEC_OUTPUT_TVOC_EQUIVALENT, BSEC_OUTPUT_BREATH_VOC_EQUIVALENT])
+        attempts.append(base + [BSEC_OUTPUT_TVOC_EQUIVALENT])
+        attempts.append(base + [BSEC_OUTPUT_BREATH_VOC_EQUIVALENT])
+    else:
+        attempts.append(base + [BSEC_OUTPUT_BREATH_VOC_EQUIVALENT])
+    attempts.append(base)
     return attempts
 
 def bsec_status_ok(status: int) -> bool:
@@ -464,11 +456,20 @@ class BsecProcessor:
         else:
             logger.info("BSEC subscribed outputs: %s", names)
         if BSEC_OUTPUT_BREATH_VOC_EQUIVALENT not in chosen:
-            logger.warning(
-                "BSEC rejected breath-VOC equivalent (id=%s); bVOC stays null. "
-                "This is not derived from IAQ/eCO2/gas resistance.",
-                BSEC_OUTPUT_BREATH_VOC_EQUIVALENT,
-            )
+            if BSEC_OUTPUT_TVOC_EQUIVALENT in chosen:
+                logger.info(
+                    "BSEC 3.x IAQ did not accept breath-VOC (id=%s ppm); "
+                    "TVOC equivalent (id=%s ppb) is subscribed instead. "
+                    "bVOC stays null; TVOC is a different Bosch output.",
+                    BSEC_OUTPUT_BREATH_VOC_EQUIVALENT,
+                    BSEC_OUTPUT_TVOC_EQUIVALENT,
+                )
+            else:
+                logger.warning(
+                    "BSEC rejected breath-VOC equivalent (id=%s); bVOC stays null. "
+                    "This is not derived from IAQ/eCO2/gas resistance.",
+                    BSEC_OUTPUT_BREATH_VOC_EQUIVALENT,
+                )
         elif BSEC_OUTPUT_TVOC_EQUIVALENT not in chosen and self._config.sample_rate == "lp":
             logger.info(
                 "BSEC TVOC (id=%s) is not in this IAQ config/library; breath-VOC remains subscribed",
