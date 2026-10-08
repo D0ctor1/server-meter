@@ -32,7 +32,7 @@ sensor:
     persist_state: false
 
 history:
-  max_samples: 10000
+  max_samples: 2000000
   max_age_seconds: 86400
 
 memory_protection:

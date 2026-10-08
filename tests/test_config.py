@@ -221,6 +221,35 @@ def test_existing_small_max_samples_yaml_still_works():
     assert cfg.history.max_samples == 100_000
 
 
+def test_legacy_max_samples_10000_is_migrated_on_load(tmp_path):
+    path = tmp_path / "config.yaml"
+    data = make_config().model_dump()
+    data["history"]["max_samples"] = 10_000
+    data["web"]["auth"]["password"] = "KeepPass1"
+    import yaml
+
+    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg.history.max_samples == 2_000_000
+    assert cfg.web.auth.password == "KeepPass1"
+    reloaded = path.read_text(encoding="utf-8")
+    assert "max_samples: 2000000" in reloaded
+    assert "KeepPass1" in reloaded
+    assert "max_samples: 10000" not in reloaded
+
+
+def test_intentional_smaller_max_samples_is_not_migrated(tmp_path):
+    path = tmp_path / "config.yaml"
+    data = make_config().model_dump()
+    data["history"]["max_samples"] = 100_000
+    import yaml
+
+    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg.history.max_samples == 100_000
+    assert "max_samples: 100000" in path.read_text(encoding="utf-8")
+
+
 def test_example_yaml_uses_two_million_cap():
     from pathlib import Path
 

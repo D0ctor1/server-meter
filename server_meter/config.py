@@ -6,12 +6,16 @@ Notification / SMTP settings may be written atomically from the Settings UI.
 
 from __future__ import annotations
 
+import logging
 import os
+import re
 from pathlib import Path
 from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, field_validator, model_validator
+
+logger = logging.getLogger("server_meter.config")
 
 # Absolute hard cap: even a broken YAML cannot grow RAM without bound.
 # This is a ceiling, not a preallocation. The deque grows with real samples.
@@ -24,6 +28,8 @@ HISTORY_DEFAULT_MAX_AGE_SECONDS = 86_400
 # HTTP /api/history never dumps the whole ring to the client by default.
 HISTORY_API_DEFAULT_LIMIT = 2_000
 HISTORY_API_MAX_LIMIT = 10_000
+# Old example.yaml / docs defaults. Upgrade rewrites only these two values.
+LEGACY_HISTORY_MAX_SAMPLES = frozenset({10_000, 20_000})
 DEFAULT_PASSWORD_PLACEHOLDER = "CHANGE_ME"
 VALID_I2C_ADDRESSES = {0x76, 0x77}
 SUPPORTED_LOCALES = ("CZ", "EN")
@@ -479,6 +485,54 @@ def _default_config_paths() -> list[Path]:
     return candidates
 
 
+def bump_legacy_history_max_samples(
+    text: str,
+    new_value: int = HISTORY_DEFAULT_MAX_SAMPLES,
+) -> tuple[str, int]:
+    """Rewrite history.max_samples only when it is an old shipped default.
+
+    Leaves passwords, SMTP, locale, alarms, and any intentional smaller/larger
+    cap (for example 100000) untouched. Returns (text, number_of_replacements).
+    """
+    history_match = re.search(r"(?ms)^history:.*?(?=^[A-Za-z_]|\Z)", text)
+    if not history_match:
+        return text, 0
+    alternatives = "|".join(str(value) for value in sorted(LEGACY_HISTORY_MAX_SAMPLES))
+    block = history_match.group(0)
+    new_block, count = re.subn(
+        rf"(?m)^(\s*max_samples:\s*)['\"]?(?:{alternatives})['\"]?(\s*(?:#.*)?)?$",
+        rf"\g<1>{new_value}\2",
+        block,
+        count=1,
+    )
+    if count == 0:
+        return text, 0
+    return text[: history_match.start()] + new_block + text[history_match.end() :], count
+
+
+def _persist_legacy_history_max_samples(path: Path, raw: str) -> str:
+    patched, count = bump_legacy_history_max_samples(raw)
+    if count == 0:
+        return raw
+    try:
+        previous = path.stat() if path.exists() else None
+        path.write_text(patched, encoding="utf-8")
+        if previous is not None:
+            os.chmod(path, previous.st_mode & 0o777)
+            try:
+                os.chown(path, previous.st_uid, previous.st_gid)
+            except PermissionError:
+                pass
+        logger.info(
+            "migrated history.max_samples to %s in %s (legacy 10000/20000 default)",
+            HISTORY_DEFAULT_MAX_SAMPLES,
+            path,
+        )
+    except OSError as exc:
+        logger.warning("could not persist history.max_samples migration in %s: %s", path, exc)
+    return patched
+
+
 def load_config(path: str | Path | None = None) -> AppConfig:
     if path is not None:
         config_path = Path(path)
@@ -506,6 +560,7 @@ def _parse_yaml(path: Path) -> AppConfig:
         raw = path.read_text(encoding="utf-8")
     except OSError as exc:
         raise ConfigError(f"Cannot read configuration {path}: {exc}") from exc
+    raw = _persist_legacy_history_max_samples(path, raw)
     try:
         data = yaml.safe_load(raw)
     except yaml.YAMLError as exc:

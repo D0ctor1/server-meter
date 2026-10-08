@@ -25,7 +25,7 @@ Příklady v git stromu:
 | `config/config.yaml.example` | zkrácená kopie šablony |
 | `config/config.mock.yaml` | vývoj bez BME690 |
 
-`install.sh` kopíruje example do `/etc/server-meter/config.yaml` **jen pokud ten soubor ještě neexistuje**.
+`install.sh` kopíruje example do `/etc/server-meter/config.yaml` **jen pokud ten soubor ještě neexistuje**. Při upgradu se v existujícím YAML změní pouze starý výchozí `history.max_samples: 10000` (nebo 20000) na `2000000`. Hesla, SMTP, locale a záměrně menší cap se nepřepisují. Stejná jednoklíčová migrace probíhá při startu služby.
 
 ---
 
