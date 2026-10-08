@@ -791,14 +791,17 @@
   }
 
   function setRole(role) {
-    currentRole = role === "admin" ? "admin" : "user";
+    const next = role === "admin" ? "admin" : "user";
+    const changed = next !== currentRole;
+    currentRole = next;
     const button = $("settings-button");
     if (button) button.hidden = currentRole !== "admin";
     if (currentRole !== "admin") {
       if (overlayOpen) closeSettings();
       return false;
     }
-    if (wantsSettingsFromUrl()) return openSettings(hashSection());
+    if (overlayOpen) return false;
+    if (changed && wantsSettingsFromUrl()) return openSettings(hashSection());
     return false;
   }
 

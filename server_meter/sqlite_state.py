@@ -160,6 +160,8 @@ class MonitoringTokens:
         self._lock = lock
         self._hasher = hasher
         self._dummy = hasher.hash("timing-dummy-token")
+        self._ok_until = 0.0
+        self._ok_token = ""
 
     def initialize(self) -> None:
         with self._lock:
@@ -192,6 +194,8 @@ class MonitoringTokens:
                 ("nagios", token_hash, now),
             )
             self._conn.commit()
+        self._ok_until = 0.0
+        self._ok_token = ""
         logger.info("issued a new read-only monitoring token")
         return raw
 
@@ -201,6 +205,8 @@ class MonitoringTokens:
             self._conn.commit()
             changed = int(cursor.rowcount or 0)
         if changed:
+            self._ok_until = 0.0
+            self._ok_token = ""
             logger.info("revoked monitoring token")
         return changed > 0
 
@@ -208,6 +214,9 @@ class MonitoringTokens:
         if not token or not token.startswith("sm_"):
             self._verify(self._dummy, token or "x")
             return False
+        now_mono = time.monotonic()
+        if token == self._ok_token and now_mono < self._ok_until:
+            return True
         with self._lock:
             rows = self._conn.execute(
                 "SELECT id, token_hash, last_used_at FROM monitoring_tokens WHERE revoked = 0"
@@ -230,6 +239,8 @@ class MonitoringTokens:
                     (now, int(matched["id"])),
                 )
                 self._conn.commit()
+        self._ok_token = token
+        self._ok_until = now_mono + 30.0
         return True
 
     def _verify(self, token_hash: str, token: str) -> bool:

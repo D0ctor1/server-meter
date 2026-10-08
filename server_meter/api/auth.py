@@ -6,6 +6,7 @@ Authorization header (not cookies), so cross-site form CSRF does not apply.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
@@ -41,7 +42,7 @@ def require_auth(config: AppConfig):
         token = _bearer_token(request)
         store: UserStore = request.app.state.users
         if token:
-            if store.tokens.authenticate(token):
+            if await asyncio.to_thread(store.tokens.authenticate, token):
                 if request.url.path.rstrip("/") not in MONITORING_PATHS:
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
@@ -59,7 +60,9 @@ def require_auth(config: AppConfig):
                 detail="Authentication required",
                 headers={"WWW-Authenticate": "Basic realm=\"server-meter\""},
             )
-        record = store.authenticate(credentials.username, credentials.password)
+        record = await asyncio.to_thread(
+            store.authenticate, credentials.username, credentials.password
+        )
         if record is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
