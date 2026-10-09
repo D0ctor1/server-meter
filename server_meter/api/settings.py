@@ -186,6 +186,7 @@ def monitoring_payload(request) -> dict[str, Any]:
         "static_iaq": sample.static_iaq if sample else None,
         "eco2": sample.co2_equivalent if sample else None,
         "bvoc": sample.breath_voc_equivalent if sample else None,
+        "tvoc": sample.tvoc_equivalent if sample else None,
         "available": sample is not None,
     }
     thresholds: dict[str, Any] = {}
@@ -218,6 +219,7 @@ def monitoring_payload(request) -> dict[str, Any]:
         "static_iaq_accuracy": sample.static_iaq_accuracy if sample else None,
         "eco2_ppm": sample.co2_equivalent if sample else None,
         "bvoc_ppm": sample.breath_voc_equivalent if sample else None,
+        "tvoc_ppb": sample.tvoc_equivalent if sample else None,
         "cpu_temperature_c": sysm.cpu_temperature_c,
         "cpu_load_percent": sysm.cpu_usage_percent,
         "ram_used_percent": sysm.ram_usage_percent,

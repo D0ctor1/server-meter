@@ -44,12 +44,16 @@ logger = logging.getLogger("server_meter.bsec")
 BSEC_MAX_PHYSICAL_SENSOR = 8
 BSEC_MAX_WORKBUFFER_SIZE = 4096
 BSEC_MAX_PROPERTY_BLOB_SIZE = 550
-BSEC_NUMBER_OUTPUTS = 15
+# Bosch headers use BSEC_NUMBER_OUTPUTS (14 in BSEC 1.4/2.x). BSEC 3.x IAQ
+# plus optional TVOC can return more; keep a buffer larger than the subscribe list.
+BSEC_NUMBER_OUTPUTS = 23
 BSEC_SAMPLE_RATE_LP = 0.33333
 BSEC_SAMPLE_RATE_ULP = 0.0033333
 BSEC_OK = 0
 # Bosch bsec_library_return_t: 0 success, >0 warning/info, <0 error.
 BSEC_W_SU_SAMPLERATEMISMATCH = 14
+# TVOC/selectivity requested against a standard IAQ config blob/library.
+BSEC_E_CONFIG_FEATUREMISMATCH = -35
 
 BSEC_INPUT_PRESSURE = 1
 BSEC_INPUT_HUMIDITY = 2
@@ -73,6 +77,61 @@ BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE = 14
 BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY = 15
 BSEC_OUTPUT_GAS_PERCENTAGE = 21
 BSEC_OUTPUT_TVOC_EQUIVALENT = 31  # BSEC 3.3 bsec_virtual_sensor_t (not 32)
+
+# Bosch bsec_virtual_sensor_t (BSEC 2.x/3.x IAQ): breath-VOC equivalent is id 4, ppm.
+# TVOC equivalent (id 31) is a different output and needs the selectivity/TVOC config.
+BSEC_OUTPUT_NAMES = {
+    BSEC_OUTPUT_IAQ: "iaq",
+    BSEC_OUTPUT_STATIC_IAQ: "static_iaq",
+    BSEC_OUTPUT_CO2_EQUIVALENT: "co2_equivalent",
+    BSEC_OUTPUT_BREATH_VOC_EQUIVALENT: "breath_voc_equivalent",
+    BSEC_OUTPUT_RAW_TEMPERATURE: "raw_temperature",
+    BSEC_OUTPUT_RAW_PRESSURE: "raw_pressure",
+    BSEC_OUTPUT_RAW_HUMIDITY: "raw_humidity",
+    BSEC_OUTPUT_RAW_GAS: "raw_gas",
+    BSEC_OUTPUT_STABILIZATION_STATUS: "stabilization_status",
+    BSEC_OUTPUT_RUN_IN_STATUS: "run_in_status",
+    BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE: "temperature",
+    BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY: "humidity",
+    BSEC_OUTPUT_GAS_PERCENTAGE: "gas_percentage",
+    BSEC_OUTPUT_TVOC_EQUIVALENT: "tvoc_equivalent",
+}
+
+# Official BSEC 3.3.0.1 IAQ example (bsec_integration.c, OUTPUT_MODE == IAQ).
+# Breath-VOC (id 4, ppm) is in the enum and OUTPUT_INCLUDED bitfield, but the
+# Bosch example does not subscribe it. LP adds TVOC equivalent (id 31, ppb).
+BSEC_IAQ_EXAMPLE_OUTPUTS = [
+    BSEC_OUTPUT_RAW_PRESSURE,
+    BSEC_OUTPUT_RAW_TEMPERATURE,
+    BSEC_OUTPUT_RAW_HUMIDITY,
+    BSEC_OUTPUT_RAW_GAS,
+    BSEC_OUTPUT_IAQ,
+    BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE,
+    BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY,
+    BSEC_OUTPUT_STATIC_IAQ,
+    BSEC_OUTPUT_CO2_EQUIVALENT,
+    BSEC_OUTPUT_STABILIZATION_STATUS,
+    BSEC_OUTPUT_RUN_IN_STATUS,
+    BSEC_OUTPUT_GAS_PERCENTAGE,
+]
+
+
+def bsec_subscription_attempts(sample_rate: str) -> list[list[int]]:
+    """Subscribe like Bosch 3.3 IAQ, then try legacy bVOC without dropping TVOC.
+
+    Live BSEC 3.3.0.1 IAQ rejected id 4 when it was in the same set. TVOC (id 31)
+    must still be attempted on the official 12-output list without breath-VOC.
+    """
+    base = list(BSEC_IAQ_EXAMPLE_OUTPUTS)
+    attempts: list[list[int]] = []
+    if sample_rate == "lp":
+        attempts.append(base + [BSEC_OUTPUT_TVOC_EQUIVALENT, BSEC_OUTPUT_BREATH_VOC_EQUIVALENT])
+        attempts.append(base + [BSEC_OUTPUT_TVOC_EQUIVALENT])
+        attempts.append(base + [BSEC_OUTPUT_BREATH_VOC_EQUIVALENT])
+    else:
+        attempts.append(base + [BSEC_OUTPUT_BREATH_VOC_EQUIVALENT])
+    attempts.append(base)
+    return attempts
 
 def bsec_status_ok(status: int) -> bool:
     """Bosch: 0 = success, positive = warning/info, negative = error."""
@@ -203,6 +262,8 @@ class BsecProcessor:
         self._available = False
         self._version: str | None = None
         self._temperature_offset = float(config.temperature_offset)
+        self._subscribed_ids: list[int] = []
+        self._logged_first_outputs = False
 
     @property
     def available(self) -> bool:
@@ -211,6 +272,14 @@ class BsecProcessor:
     @property
     def version(self) -> str | None:
         return self._version
+
+    @property
+    def subscribed_ids(self) -> list[int]:
+        return list(self._subscribed_ids)
+
+    @property
+    def subscribed_output_names(self) -> list[str]:
+        return [BSEC_OUTPUT_NAMES.get(sid, str(sid)) for sid in self._subscribed_ids]
 
     def open(self) -> None:
         lib = self._load_library()
@@ -270,7 +339,26 @@ class BsecProcessor:
         if not bsec_status_ok(status):
             logger.warning("bsec_do_steps status=%s", status)
             return None
-        return _parse_outputs(outputs, int(n_outputs.value))
+        result = _parse_outputs(outputs, int(n_outputs.value))
+        if not self._logged_first_outputs:
+            self._logged_first_outputs = True
+            present = []
+            for i in range(int(n_outputs.value)):
+                sid = int(outputs[i].sensor_id)
+                name = BSEC_OUTPUT_NAMES.get(sid, f"id:{sid}")
+                present.append(f"{name}={float(outputs[i].signal):g}(acc={int(outputs[i].accuracy)})")
+            logger.info("BSEC first outputs: %s", " ".join(present) if present else "(none)")
+            if (
+                result.breath_voc_equivalent is None
+                and BSEC_OUTPUT_BREATH_VOC_EQUIVALENT in self._subscribed_ids
+            ):
+                logger.warning(
+                    "BSEC subscribed breath-VOC (id=%s) but first do_steps did not return it; "
+                    "subscribed=%s",
+                    BSEC_OUTPUT_BREATH_VOC_EQUIVALENT,
+                    ",".join(self.subscribed_output_names) or "(none)",
+                )
+        return result
 
     def _load_library(self) -> ctypes.CDLL:
         errors: list[str] = []
@@ -350,45 +438,46 @@ class BsecProcessor:
 
     def _subscribe(self, lib: ctypes.CDLL) -> None:
         rate = BSEC_SAMPLE_RATE_ULP if self._config.sample_rate == "ulp" else BSEC_SAMPLE_RATE_LP
-        output_ids = [
-            BSEC_OUTPUT_IAQ,
-            BSEC_OUTPUT_STATIC_IAQ,
-            BSEC_OUTPUT_CO2_EQUIVALENT,
-            BSEC_OUTPUT_RAW_TEMPERATURE,
-            BSEC_OUTPUT_RAW_PRESSURE,
-            BSEC_OUTPUT_RAW_HUMIDITY,
-            BSEC_OUTPUT_RAW_GAS,
-            BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE,
-            BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY,
-            BSEC_OUTPUT_STABILIZATION_STATUS,
-            BSEC_OUTPUT_RUN_IN_STATUS,
-            BSEC_OUTPUT_GAS_PERCENTAGE,
-        ]
-        # Breath-VOC is derived internally in some BSEC 3.x IAQ configs; subscribe last
-        # and drop it if the library rejects the set.
-        optional = [BSEC_OUTPUT_BREATH_VOC_EQUIVALENT]
-        if self._config.sample_rate == "lp":
-            optional.append(BSEC_OUTPUT_TVOC_EQUIVALENT)
-
-        requested_ids = list(output_ids)
-        status = self._try_subscribe(lib, requested_ids + optional, rate)
-        if not bsec_status_ok(status):
-            status = self._try_subscribe(lib, requested_ids, rate)
-        if not bsec_status_ok(status):
-            core = [
-                BSEC_OUTPUT_IAQ,
-                BSEC_OUTPUT_STATIC_IAQ,
-                BSEC_OUTPUT_CO2_EQUIVALENT,
-                BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE,
-                BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY,
-                BSEC_OUTPUT_STABILIZATION_STATUS,
-                BSEC_OUTPUT_RUN_IN_STATUS,
-            ]
-            status = self._try_subscribe(lib, core, rate)
-        if not bsec_status_ok(status):
+        chosen: list[int] = []
+        status = -1
+        for output_ids in bsec_subscription_attempts(self._config.sample_rate):
+            status = self._try_subscribe(lib, output_ids, rate)
+            if bsec_status_ok(status):
+                chosen = list(output_ids)
+                break
+            logger.info(
+                "bsec_update_subscription status=%s for outputs [%s]; trying a smaller set",
+                status,
+                ",".join(BSEC_OUTPUT_NAMES.get(sid, str(sid)) for sid in output_ids),
+            )
+        if not chosen or not bsec_status_ok(status):
             raise BsecUnavailableError(f"bsec_update_subscription failed: {status}")
+        self._subscribed_ids = chosen
+        names = ",".join(self.subscribed_output_names)
         if status > 0:
-            logger.info("bsec_update_subscription warning %s (outputs still subscribed)", status)
+            logger.info("bsec_update_subscription warning %s (outputs still subscribed: %s)", status, names)
+        else:
+            logger.info("BSEC subscribed outputs: %s", names)
+        if BSEC_OUTPUT_BREATH_VOC_EQUIVALENT not in chosen:
+            if BSEC_OUTPUT_TVOC_EQUIVALENT in chosen:
+                logger.info(
+                    "BSEC 3.x IAQ did not accept breath-VOC (id=%s ppm); "
+                    "TVOC equivalent (id=%s ppb) is subscribed instead. "
+                    "bVOC stays null; TVOC is a different Bosch output.",
+                    BSEC_OUTPUT_BREATH_VOC_EQUIVALENT,
+                    BSEC_OUTPUT_TVOC_EQUIVALENT,
+                )
+            else:
+                logger.warning(
+                    "BSEC rejected breath-VOC equivalent (id=%s); bVOC stays null. "
+                    "This is not derived from IAQ/eCO2/gas resistance.",
+                    BSEC_OUTPUT_BREATH_VOC_EQUIVALENT,
+                )
+        elif BSEC_OUTPUT_TVOC_EQUIVALENT not in chosen and self._config.sample_rate == "lp":
+            logger.info(
+                "BSEC TVOC (id=%s) is not in this IAQ config/library; breath-VOC remains subscribed",
+                BSEC_OUTPUT_TVOC_EQUIVALENT,
+            )
 
     def _try_subscribe(self, lib: ctypes.CDLL, output_ids: list[int], rate: float) -> int:
         n = len(output_ids)

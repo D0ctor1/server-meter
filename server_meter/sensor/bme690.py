@@ -331,6 +331,9 @@ class Bme690Driver(SensorDriver):
             "i2c_address": hex(self._config.i2c.address),
             "bsec_loaded": bool(self._bsec and self._bsec.available),
             "bsec_version": self._bsec.version if self._bsec else None,
+            "bsec_subscribed_outputs": (
+                self._bsec.subscribed_output_names if self._bsec and self._bsec.available else []
+            ),
             "opened": self._opened,
         }
 

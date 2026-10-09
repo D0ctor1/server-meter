@@ -130,6 +130,7 @@ def test_help_keys_cover_gas_iaq_and_voc_metrics():
         "sensor.help.static_iaq_accuracy",
         "sensor.help.eco2",
         "sensor.help.bvoc",
+        "sensor.help.tvoc",
         "help.icon_label",
         "duration.days",
         "duration.hours",
@@ -141,7 +142,7 @@ def test_help_keys_cover_gas_iaq_and_voc_metrics():
     assert "info-tip" in CSS
     assert "formatDuration" in APP_JS
     assert "formatDuration" in I18N_JS
-    for metric in ("gas_resistance", "iaq", "static_iaq", "static_iaq_accuracy", "eco2", "bvoc"):
+    for metric in ("gas_resistance", "iaq", "static_iaq", "static_iaq_accuracy", "eco2", "bvoc", "tvoc"):
         assert f'helpKey: "sensor.help.{metric}"' in APP_JS
 
 
