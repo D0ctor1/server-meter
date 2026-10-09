@@ -9,7 +9,7 @@ CONFIG_FILE="${CONFIG_DIR}/config.yaml"
 SERVICE_USER="${SERVICE_USER:-server-meter}"
 STATE_DIR="${STATE_DIR:-/var/lib/server-meter}"
 RESUME_FLAG="${STATE_DIR}/install-resume"
-SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
+SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESUME=0
 SKIP_UPGRADE=0
 BME690_CHIP_ID="0x61"
@@ -18,6 +18,8 @@ DETECTED_ADDR=""
 BSEC_LIB=""
 BSEC_CONFIG=""
 BSEC_OK=0
+INSTALL_YAML_CREDENTIALS_MATCH=0
+INSTALL_FACTORY_PASSWORD_ACTIVE=0
 
 if [[ "${1:-}" == "--resume" ]]; then
   RESUME=1
@@ -181,22 +183,92 @@ sync_tree() {
   if [[ "${SRC_DIR}" == "${PREFIX}" ]]; then
     return
   fi
-  rsync -a --delete \
-    --exclude '.git' \
-    --exclude '.venv' \
-    --exclude 'venv' \
-    --exclude '__pycache__' \
-    --exclude '.pytest_cache' \
+  # /lib holds Bosch BSEC artifacts that are not in git. Excluding the whole
+  # directory (and protecting it) prevents rsync --delete from trying to remove
+  # a non-empty PREFIX/lib ("cannot delete non-empty directory: lib").
+  # /venv is created separately and must not be wiped by the source tree copy.
+  if ! rsync -a --delete \
+    --exclude '.git/' \
+    --exclude '.venv/' \
+    --exclude '/venv/' \
+    --exclude '/lib/' \
+    --exclude '__pycache__/' \
+    --exclude '.pytest_cache/' \
     --exclude 'config/config.yaml' \
-    --exclude 'lib/libalgobsec.so' \
-    --exclude 'lib/libalgobsec.a' \
-    --exclude 'lib/bsec_iaq.config' \
-    --exclude 'lib/*.zip' \
+    --filter 'P /venv/' \
+    --filter 'P /lib/' \
     "${SRC_DIR}/" "${PREFIX}/"
+  then
+    fail "Failed to copy application tree" \
+      "rsync ${SRC_DIR}/ -> ${PREFIX}/ failed. Existing /etc/server-meter and ${STATE_DIR} were not modified."
+  fi
+}
+
+venv_path_is_safe() {
+  local venv_dir="$1"
+  local prefix_real
+  if [[ "${PREFIX}" != /* ]] || [[ -z "${PREFIX}" ]]; then
+    return 1
+  fi
+  if [[ "${venv_dir}" != "${PREFIX}/venv" ]]; then
+    return 1
+  fi
+  case "${PREFIX}" in
+    /|/usr|/usr/*|/lib|/lib/*|/lib64|/lib64/*|/bin|/bin/*|/sbin|/sbin/*|/etc|/etc/*|/var|/var/*|/root|/root/*|/home|/opt)
+      return 1
+      ;;
+  esac
+  prefix_real="$(readlink -f "${PREFIX}" 2>/dev/null || printf '%s' "${PREFIX}")"
+  case "${prefix_real}" in
+    /|/usr|/usr/*|/lib|/lib/*|/lib64|/lib64/*|/bin|/bin/*|/sbin|/sbin/*|/etc|/etc/*|/var|/var/*|/root|/root/*|/home|/opt)
+      return 1
+      ;;
+  esac
+  if [[ -e "${venv_dir}" ]]; then
+    local venv_real
+    venv_real="$(readlink -f "${venv_dir}" 2>/dev/null || true)"
+    if [[ -n "${venv_real}" && "${venv_real}" != "${prefix_real}/venv" ]]; then
+      return 1
+    fi
+  fi
+  return 0
+}
+
+venv_python_usable() {
+  local venv_dir="$1"
+  [[ -x "${venv_dir}/bin/python" ]] || return 1
+  [[ -f "${venv_dir}/pyvenv.cfg" ]] || return 1
+  "${venv_dir}/bin/python" -c "import sys" >/dev/null 2>&1 || return 1
+  local current_py cfg_py
+  current_py="$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+  cfg_py="$(awk -F' *= *' '/^version/ {print $2; exit}' "${venv_dir}/pyvenv.cfg" | cut -d. -f1,2)"
+  [[ -n "${cfg_py}" && "${cfg_py}" == "${current_py}" ]]
+}
+
+ensure_venv() {
+  local venv_dir="${PREFIX}/venv"
+  if ! venv_path_is_safe "${venv_dir}"; then
+    fail "Python environment" "refusing to create or remove a venv outside ${PREFIX}/venv."
+  fi
+  if venv_python_usable "${venv_dir}"; then
+    if ! python3 -m venv --upgrade "${venv_dir}"; then
+      fail "Python environment" "python3 -m venv --upgrade ${venv_dir} failed."
+    fi
+    return
+  fi
+  if [[ -e "${venv_dir}" ]]; then
+    if ! venv_path_is_safe "${venv_dir}"; then
+      fail "Python environment" "refusing to remove unexpected venv path."
+    fi
+    rm -rf "${venv_dir}"
+  fi
+  if ! python3 -m venv "${venv_dir}"; then
+    fail "Python environment" "python3 -m venv ${venv_dir} failed."
+  fi
 }
 
 setup_venv() {
-  python3 -m venv "${PREFIX}/venv"
+  ensure_venv
   "${PREFIX}/venv/bin/pip" install --upgrade pip setuptools -q
   "${PREFIX}/venv/bin/pip" install -r "${PREFIX}/requirements.txt" -q
   # Install the local package into the venv so `python -m server_meter` works
@@ -584,17 +656,50 @@ start_service() {
   fail "HTTP /api/health failed" "$(service_diagnostics)"
 }
 
+http_capture() {
+  # $1 = URL, $2 = body file, remaining args are extra curl options.
+  # Prints the HTTP status code. Never dumps Authorization headers.
+  local url="$1"
+  local body="$2"
+  shift 2
+  curl -sS -o "${body}" -w '%{http_code}' "$@" "${url}" || true
+}
+
+redact_api_body() {
+  # Keep a short, secret-free snippet for diagnostics.
+  local body="$1"
+  python3 - "${body}" <<'PY'
+from pathlib import Path
+import sys
+text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")[:400]
+for needle in ("authorization:", "password:", "passwd=", "argon2", "bearer "):
+    if needle in text.lower():
+        text = "[redacted]"
+        break
+print(text.replace("\r", " ").replace("\n", " "))
+PY
+}
+
+probe_auth_json() {
+  PYTHONPATH="${PREFIX}" "$(python_bin)" "${PREFIX}/scripts/install_auth_probe.py" --config "${CONFIG_FILE}"
+}
+
 write_netrc() {
   local netrc="/run/server-meter-install.netrc"
+  rm -f "${netrc}"
   "$(python_bin)" - "${CONFIG_FILE}" "${netrc}" <<'PY'
 import sys
 from pathlib import Path
 import yaml
 cfg = yaml.safe_load(Path(sys.argv[1]).read_text(encoding="utf-8"))
-auth = cfg["web"]["auth"]
+auth = (cfg or {}).get("web", {}).get("auth") or {}
+username = str(auth.get("username") or "")
+password = str(auth.get("password") or "")
+if not username or not password:
+    raise SystemExit(2)
 Path(sys.argv[2]).write_text(
-    f"machine 127.0.0.1 login {auth['username']} password {auth['password']}\n"
-    f"machine localhost login {auth['username']} password {auth['password']}\n",
+    f"machine 127.0.0.1 login {username} password {password}\n"
+    f"machine localhost login {username} password {password}\n",
     encoding="utf-8",
 )
 PY
@@ -602,34 +707,110 @@ PY
   printf '%s\n' "${netrc}"
 }
 
+fail_http() {
+  local title="$1"
+  local endpoint="$2"
+  local status="$3"
+  local body_file="$4"
+  local extra="$5"
+  local body_snip
+  body_snip="$(redact_api_body "${body_file}" 2>/dev/null || printf '%s' '[unreadable]')"
+  rm -f "${body_file}"
+  fail "${title}" \
+"Endpoint: ${endpoint}
+HTTP status: ${status}
+Authentication: ${extra}
+Credentials are not printed.
+
+$(service_diagnostics)
+
+Response snippet: ${body_snip}"
+}
+
 test_api() {
   step 11 "Testing API"
-  local netrc
+  local health_body health_status probe
+  health_body="$(mktemp /run/server-meter/api-health.XXXXXX)"
+  health_status="$(http_capture http://127.0.0.1:8080/api/health "${health_body}")"
+  if [[ "${health_status}" != "200" ]] || ! grep -qE '"status":"(ok|healthy)"' "${health_body}"; then
+    fail_http "HTTP /api/health failed" "/api/health" "${health_status:-000}" "${health_body}" "not required (public liveness)"
+  fi
+  rm -f "${health_body}"
+
+  if ! probe="$(probe_auth_json)"; then
+    fail "User database check failed" \
+"The service is up but the installer could not verify an administrator in SQLite.
+${probe}
+
+$(service_diagnostics)"
+  fi
+  local yaml_match admin_count factory
+  yaml_match="$(printf '%s' "${probe}" | "$(python_bin)" -c 'import json,sys; print(json.load(sys.stdin).get("yaml_credentials_match"))')"
+  admin_count="$(printf '%s' "${probe}" | "$(python_bin)" -c 'import json,sys; print(json.load(sys.stdin).get("enabled_admin_count"))')"
+  factory="$(printf '%s' "${probe}" | "$(python_bin)" -c 'import json,sys; print(json.load(sys.stdin).get("factory_password_active"))')"
+  INSTALL_FACTORY_PASSWORD_ACTIVE=0
+  if [[ "${factory}" == "True" ]]; then
+    INSTALL_FACTORY_PASSWORD_ACTIVE=1
+  fi
+  INSTALL_YAML_CREDENTIALS_MATCH=0
+  if [[ "${yaml_match}" == "True" ]]; then
+    INSTALL_YAML_CREDENTIALS_MATCH=1
+  fi
+  if [[ "${admin_count}" != "1" && "${admin_count}" != [1-9]* ]]; then
+    fail "No enabled administrator" \
+"SQLite user store has no enabled admin. Existing accounts were not rewritten.
+$(service_diagnostics)"
+  fi
+
+  local unauth_body unauth_status
+  unauth_body="$(mktemp /run/server-meter/api-unauth.XXXXXX)"
+  local path
+  for path in /api/current /api/history /api/nagios/check; do
+    unauth_status="$(http_capture "http://127.0.0.1:8080${path}" "${unauth_body}")"
+    if [[ "${unauth_status}" != "401" ]]; then
+      fail_http "Protected API is not authenticating" "${path}" "${unauth_status:-000}" "${unauth_body}" "none (anonymous request)"
+    fi
+  done
+  rm -f "${unauth_body}"
+
+  if [[ "${INSTALL_YAML_CREDENTIALS_MATCH}" -ne 1 ]]; then
+    # Reinstall with an existing SQLite admin whose password is no longer the
+    # YAML seed. Do not invent credentials and do not treat 401 as success of
+    # a credentialed call. Liveness + auth-required + admin-exists is enough.
+    ok
+    return
+  fi
+
+  local netrc current_body current_status nagios_hdr nagios_body hist_body hist_status
   netrc="$(write_netrc)"
-  local current nagios hist
-  if ! curl -fsS http://127.0.0.1:8080/api/health 2>/dev/null | grep -qE '"status":"(ok|healthy)"'; then
-    rm -f "${netrc}"
-    fail "HTTP /api/health failed" "$(service_diagnostics)"
-  fi
-  current="$(curl -sS --netrc-file "${netrc}" http://127.0.0.1:8080/api/current || true)"
-  # ASGI/Uvicorn sends header names lowercase (x-nagios-status). HTTP is
-  # case-insensitive; this grep must be too. Do not use curl -f: Nagios is
-  # always HTTP 200, and a 5xx body is more useful than an empty capture.
-  nagios="$(curl -sS --netrc-file "${netrc}" -D - http://127.0.0.1:8080/api/nagios/check || true)"
-  hist="$(curl -sS --netrc-file "${netrc}" http://127.0.0.1:8080/api/history || true)"
+  current_body="$(mktemp /run/server-meter/api-current.XXXXXX)"
+  current_status="$(http_capture http://127.0.0.1:8080/api/current "${current_body}" --netrc-file "${netrc}")"
+  nagios_hdr="$(mktemp /run/server-meter/api-nagios-h.XXXXXX)"
+  nagios_body="$(mktemp /run/server-meter/api-nagios.XXXXXX)"
+  curl -sS --netrc-file "${netrc}" -D "${nagios_hdr}" -o "${nagios_body}" http://127.0.0.1:8080/api/nagios/check >/dev/null || true
+  hist_body="$(mktemp /run/server-meter/api-history.XXXXXX)"
+  hist_status="$(http_capture http://127.0.0.1:8080/api/history "${hist_body}" --netrc-file "${netrc}")"
   rm -f "${netrc}"
-  if [[ "${current}" != *'"timestamp"'* ]]; then
-    fail "HTTP /api/current failed" "Basic Auth or API error.
-${current}"
+
+  if [[ "${current_status}" != "200" ]] || ! grep -q '"timestamp"' "${current_body}"; then
+    if [[ "${current_status}" == "401" || "${current_status}" == "403" ]]; then
+      fail_http "HTTP /api/current authentication failed" "/api/current" "${current_status}" "${current_body}" "attempted (YAML seed matched SQLite; secret not shown)"
+    fi
+    fail_http "HTTP /api/current failed" "/api/current" "${current_status:-000}" "${current_body}" "attempted (secret not shown)"
   fi
-  if ! printf '%s' "${nagios}" | grep -qiE 'X-Nagios-Status:[[:space:]]*[0-3]'; then
+  rm -f "${current_body}"
+  if ! grep -qiE 'X-Nagios-Status:[[:space:]]*[0-3]' "${nagios_hdr}"; then
+    local nagios_snip
+    nagios_snip="$(redact_api_body "${nagios_hdr}") $(redact_api_body "${nagios_body}")"
+    rm -f "${nagios_hdr}" "${nagios_body}" "${hist_body}"
     fail "HTTP /api/nagios/check failed" "Expected X-Nagios-Status header (0-3).
-${nagios}"
+${nagios_snip}"
   fi
-  if [[ "${hist}" != *'"source":"ram"'* ]] || [[ "${hist}" != *'"persistent":false'* ]]; then
-    fail "RAM history check failed" "API must serve RAM-only history.
-${hist}"
+  rm -f "${nagios_hdr}" "${nagios_body}"
+  if [[ "${hist_status}" != "200" ]] || ! grep -q '"source":"ram"' "${hist_body}" || ! grep -q '"persistent":false' "${hist_body}"; then
+    fail_http "RAM history check failed" "/api/history" "${hist_status:-000}" "${hist_body}" "attempted (secret not shown)"
   fi
+  rm -f "${hist_body}"
   ok
 }
 
@@ -648,22 +829,28 @@ test_sensor() {
   if [[ "${bsec}" == "True" ]]; then
     BSEC_OK=1
   fi
-  local netrc current
+  if [[ "${INSTALL_YAML_CREDENTIALS_MATCH}" -ne 1 ]]; then
+    ok
+    return
+  fi
+  local netrc current_body current_status
   netrc="$(write_netrc)"
+  current_body="$(mktemp /run/server-meter/api-sample.XXXXXX)"
   local i
-  current=""
+  current_status=""
   for i in $(seq 1 20); do
-    current="$(curl -fsS --netrc-file "${netrc}" http://127.0.0.1:8080/api/current || true)"
-    if [[ "${current}" == *'"available":true'* ]]; then
+    current_status="$(http_capture http://127.0.0.1:8080/api/current "${current_body}" --netrc-file "${netrc}")"
+    if [[ "${current_status}" == "200" ]] && grep -q '"available":true' "${current_body}"; then
       break
     fi
     sleep 1
   done
   rm -f "${netrc}"
-  if [[ "${current}" != *'"available":true'* ]]; then
-    fail "HTTP /api/current has no sample yet" \
-      "systemd is running but the first BME690 sample did not appear."
+  if [[ "${current_status}" != "200" ]] || ! grep -q '"available":true' "${current_body}"; then
+    fail_http "HTTP /api/current has no sample yet" "/api/current" "${current_status:-000}" "${current_body}" \
+      "attempted (secret not shown). systemd is running but the first BME690 sample did not appear."
   fi
+  rm -f "${current_body}"
   ok
 }
 
@@ -682,6 +869,9 @@ SERVER-METER INSTALLATION COMPLETE
 
 Web:
 http://${ip}:8080
+EOF
+  if [[ "${INSTALL_FACTORY_PASSWORD_ACTIVE}" -eq 1 ]]; then
+    cat <<EOF
 
 Username:
 admin
@@ -690,6 +880,18 @@ Password:
 CHANGE_ME
 
 CHANGE THE PASSWORD BEFORE NORMAL OPERATION.
+The YAML factory password still matches the SQLite administrator.
+EOF
+  else
+    cat <<EOF
+
+Existing administrator account was kept.
+This installer did not change user passwords.
+Log in with the password already set in Settings → Users.
+YAML web.auth.password is only used to seed the first admin.
+EOF
+  fi
+  cat <<EOF
 
 Edit:
 ${CONFIG_FILE}
@@ -777,4 +979,6 @@ main() {
   print_success
 }
 
-main "$@"
+if [[ "${INSTALL_SH_SOURCE_ONLY:-}" != "1" ]]; then
+  main "$@"
+fi

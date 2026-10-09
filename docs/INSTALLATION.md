@@ -8,7 +8,7 @@ cd server-meter
 sudo ./install.sh
 ```
 
-Skript nainstaluje závislosti, zapne I²C, najde BME690 (chip ID `0x61` na `0x76`/`0x77`), vytvoří uživatele, venv, YAML, systemd, volatile journald a spustí službu. Heslo v YAML **nesmaže** při opakovaném spuštění.
+Skript nainstaluje závislosti, zapne I²C, najde BME690 (chip ID `0x61` na `0x76`/`0x77`), vytvoří uživatele, venv, YAML, systemd, volatile journald a spustí službu. Heslo v YAML **nesmaže** při opakovaném spuštění. Adresář `/opt/server-meter/lib` (BSEC) a existující `venv` se při `rsync` nemažou. Přihlášení bere SQLite `/var/lib/server-meter/users.db`; YAML `web.auth.password` je jen semínko prvního administrátora. Reinstalace existující účty nepřepisuje. Instalační test `/api/current` použije YAML heslo jen tehdy, když se stále shoduje se SQLite; jinak ověří `/api/health` a že chráněné API vrací 401.
 
 Jediný ruční zásah po úspěchu: přihlásit se jako admin (YAML heslo se jednou migrujte do SQLite) a změnit heslo v Nastavení → Uživatelé. YAML se při upgradu nepřepisuje.
 
