@@ -86,14 +86,17 @@ class NotificationEngine:
                 await asyncio.to_thread(self._send, item, self.config)
                 self.delivery_ok = True
                 self.last_delivery_error = None
+                self._record_delivery(item, ok=True)
             except SmtpError as exc:
                 self.delivery_ok = False
                 self.last_delivery_error = str(exc)
                 logger.error("SMTP delivery failed: %s", exc)
+                self._record_delivery(item, ok=False, error=str(exc))
             except Exception as exc:  # noqa: BLE001 — isolate sensor loop
                 self.delivery_ok = False
                 self.last_delivery_error = "SMTP delivery failed"
                 logger.error("SMTP delivery failed: %s", exc)
+                self._record_delivery(item, ok=False, error="delivery failed")
 
     def observe(
         self,
@@ -142,14 +145,17 @@ class NotificationEngine:
         except SmtpError as exc:
             self.delivery_ok = False
             self.last_delivery_error = str(exc)
+            self._record_delivery(message, ok=False, error=str(exc))
             raise
         except Exception as exc:  # noqa: BLE001
             self.delivery_ok = False
             self.last_delivery_error = "SMTP delivery failed"
             logger.error("SMTP delivery failed: %s", exc)
+            self._record_delivery(message, ok=False, error="delivery failed")
             raise SmtpError("SMTP delivery failed") from None
         self.delivery_ok = True
         self.last_delivery_error = None
+        self._record_delivery(message, ok=True)
 
     def _test_message(self) -> OutboundEmail:
         locale = self.config.web.locale
@@ -328,6 +334,24 @@ class NotificationEngine:
         except Exception:
             logger.exception("alarm history write failed; measurement loop continues")
 
+    def _record_delivery(self, message: OutboundEmail, *, ok: bool, error: str = "") -> None:
+        if self._history is None:
+            return
+        note = "delivered" if ok else (error or "delivery failed")[:80]
+        try:
+            self._history.append(
+                kind="EMAIL_OK" if ok else "EMAIL_FAIL",
+                metric=message.metric,
+                value=None,
+                unit="",
+                threshold=note,
+                duration_seconds=None,
+                hostname=socket.gethostname(),
+                created_at=self._time(),
+            )
+        except Exception:
+            logger.exception("notification history write failed; measurement loop continues")
+
     def _format_alert_body(
         self,
         locale: str,
@@ -418,10 +442,12 @@ class NotificationEngine:
                 self._send(message, self.config)
                 self.delivery_ok = True
                 self.last_delivery_error = None
+                self._record_delivery(message, ok=True)
             except Exception as exc:
                 self.delivery_ok = False
                 self.last_delivery_error = str(exc)
                 logger.error("SMTP delivery failed: %s", exc)
+                self._record_delivery(message, ok=False, error=str(exc))
             return
         if self._queue.full():
             try:

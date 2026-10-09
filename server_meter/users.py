@@ -1,4 +1,4 @@
-"""Persistent user accounts in SQLite. Sensor history stays in RAM."""
+"""Persistent user accounts in SQLite. Sensor and alarm history stay in RAM."""
 
 from __future__ import annotations
 
@@ -20,7 +20,8 @@ from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHash, VerificationError, VerifyMismatchError
 
 from server_meter.config import DEFAULT_PASSWORD_PLACEHOLDER, AppConfig
-from server_meter.sqlite_state import AlarmHistory, MonitoringTokens
+from server_meter.alarm_history import AlarmHistory
+from server_meter.sqlite_state import MonitoringTokens
 
 logger = logging.getLogger("server_meter.users")
 
@@ -237,7 +238,7 @@ class UserStore:
         self._conn.execute("PRAGMA foreign_keys = ON")
         if path != ":memory:" and not test:
             self._conn.execute("PRAGMA journal_mode = WAL")
-        self.alarms = AlarmHistory(self._conn, self._lock)
+        self.alarms = AlarmHistory()
         self.tokens = MonitoringTokens(self._conn, self._lock, self._hasher)
         self.initialize()
 

@@ -79,6 +79,7 @@ def test_cz_and_en_dictionaries_have_the_same_keys():
         "system.reboot_host.confirm_button",
         "settings.tab.users",
         "dashboard.system_health",
+        "dashboard.alarm_history_hint",
         "health.ram_protection_active",
         "history.window_all",
         "history.empty",

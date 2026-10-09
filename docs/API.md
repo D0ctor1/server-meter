@@ -561,6 +561,38 @@ Aplikace **nemá**:
 
 ---
 
+## GET /api/alarms/history
+
+Historie výskytu alarmů a výsledků odeslání e-mailu. **Pouze RAM**, prázdná po startu procesu. Stará SQLite tabulka `alarm_history` (pokud v `users.db` zbývá) se **nečte**.
+
+### Autentizace
+
+HTTP Basic Auth (`admin` i `user`).
+
+### Parametry
+
+| Query | Význam |
+|---|---|
+| `limit` | 1–500, výchozí 100. Nejnovější záznamy první. |
+
+`kind` je jazykově neutrální: `WARNING`, `CRITICAL`, `RECOVERY`, `EMAIL_OK`, `EMAIL_FAIL`.
+
+### Očekávaný výsledek
+
+HTTP **200**:
+
+```json
+{
+  "alarms": [],
+  "source": "ram",
+  "persistent": false
+}
+```
+
+Po `systemctl restart server-meter` je `alarms` vždy `[]`, dokud v aktuálním běhu nevznikne nová událost.
+
+---
+
 ## GET /api/monitoring
 
 JSON pro Nagios shell plugin a další dohled. **Jazykově neutrální** (nezávislé na `web.locale`). Autoritativní Nagios stav je `overall` / `status` (`OK`/`WARNING`/`CRITICAL`/`UNKNOWN`) z notifikačního enginu. SMTP heslo se neposílá.
@@ -571,7 +603,7 @@ Vedle vnořených `sensor` / `system` / `thresholds` / `alarms` endpoint vrací 
 
 HTTP Basic Auth. Volitelný read-only monitoring token (`Authorization: Bearer …` nebo `X-Monitoring-Token`) čte **jen** `GET /api/monitoring`. Admin ho vydá v Nastavení → Systém. Token **nenahrazuje** stávající Basic Auth plugin.
 
-Admin export konfigurace: `GET /api/admin/export` (hesla, SMTP heslo a tokeny = `REDACTED`). Systémové informace: `GET /api/admin/system`. Historie alarmů (ne sensor history): `GET /api/alarms/history`.
+Admin export konfigurace: `GET /api/admin/export` (hesla, SMTP heslo a tokeny = `REDACTED`). Systémové informace: `GET /api/admin/system`. Historie alarmů (RAM-only, `persistent: false`): `GET /api/alarms/history`.
 
 ### Proveď
 
