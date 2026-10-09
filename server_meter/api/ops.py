@@ -48,7 +48,11 @@ def build_ops_router(auth_dep, admin_dep) -> APIRouter:
     ) -> dict[str, Any]:
         store: UserStore = request.app.state.users
         rows = store.alarms.list_recent(limit)
-        return {"alarms": [row.public_dict() for row in rows], "persistent": True}
+        return {
+            "alarms": [row.public_dict() for row in rows],
+            "source": "ram",
+            "persistent": False,
+        }
 
     @router.get("/api/admin/monitoring-token")
     async def token_status(

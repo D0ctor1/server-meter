@@ -25,7 +25,7 @@ delete oldest samples
 SD CARD
 ```
 
-Test v CI: `tests/test_disk_policy.py` (`sqlite3` jen pro účty, historii alarmů a monitoring token v `users.py` / `sqlite_state.py`, žádný `FileHandler`, žádné volání `bsec_get_state(`). Sensorové vzorky v SQLite nejsou.
+Test v CI: `tests/test_disk_policy.py` (`sqlite3` jen pro účty a monitoring token v `users.py` / `sqlite_state.py`, žádný `FileHandler`, žádné volání `bsec_get_state(`). Sensorové vzorky ani historie alarmů v SQLite nejsou.
 
 ---
 
@@ -40,7 +40,7 @@ Statické, spravované operátorem. Aplikace to za běhu **nepřepisuje**:
 | Statický frontend | `/opt/server-meter/web/` |
 | Python venv | `/opt/server-meter/venv/` |
 | YAML konfigurace (včetně SMTP) | `/etc/server-meter/config.yaml` |
-| SQLite uživatelské účty, historie alarmů, monitoring token | `/var/lib/server-meter/users.db` (ne historie měření) |
+| SQLite uživatelské účty a monitoring token | `/var/lib/server-meter/users.db` (ne historie měření ani alarmů; případná stará tabulka `alarm_history` se nečte) |
 | systemd unit | `/etc/systemd/system/server-meter.service` |
 | helper units (restart/reboot) | `/etc/systemd/system/server-meter-self-restart.service`, `/etc/systemd/system/server-meter-host-reboot.service` |
 | polkit rule | `/etc/polkit-1/rules.d/50-server-meter.rules` |
@@ -61,7 +61,8 @@ Zápis na SD probíhá při **instalaci / upgradu / uložení Settings (SMTP/pra
 | statistiky smyčky | `RuntimeStats` | vynulované |
 | memory pressure | `MemoryProtector` | vynulované |
 | CPU usage delta | `SystemMonitor._prev_cpu` | vynulované |
-| stav alarmu / e-mailová fronta | `NotificationEngine` | vynulované (historie alarmů je v SQLite, bez hesel) |
+| stav alarmu / e-mailová fronta | `NotificationEngine` | vynulované |
+| historie alarmů a notifikací | `AlarmHistory` (deque v RAM) | **prázdné** |
 | poslední aktivita uživatelů | `ActivityTracker` (dict v RAM) | **prázdné** („Nikdy“ / „Never“) |
 
 BSEC `persist_state: true` konfigurace **odmítne** (`ConfigError`). Wrapper **nevolá** `bsec_get_state`.
@@ -80,7 +81,9 @@ Po restartu může chvíli trvat, než BSEC dosáhne vyšší IAQ accuracy. To j
 - persistace BSEC kalibrace
 - InfluxDB, Redis, Prometheus client v runtime závislostech
 
-`requirements.txt` obsahuje FastAPI, Uvicorn, Pydantic, PyYAML, smbus2 a argon2-cffi (hashe hesel). `sqlite3` je ve stdlib a používá se jen pro tabulku `users`.
+`requirements.txt` obsahuje FastAPI, Uvicorn, Pydantic, PyYAML, smbus2 a argon2-cffi (hashe hesel). `sqlite3` je ve stdlib a používá se jen pro tabulky `users` a `monitoring_tokens`.
+
+Na existujících instalacích může v `users.db` zbývat tabulka `alarm_history` z dřívější verze. Aplikace ji **nevytváří**, **nečte** a **nezapisuje**. Nemaže se, protože sdílí soubor s účty — upgrade nesmí sáhnout na hesla. Webové rozhraní ji nikdy nepoužije jako zdroj.
 
 ---
 
@@ -267,4 +270,10 @@ curl -u admin:YOUR_PASSWORD http://127.0.0.1:8080/api/history
 
 `count` je 0 nebo jen nové vzorky. `"source":"ram"`, `"persistent":false`.
 
-To je důkaz, že historie nebyla na kartě.
+```bash
+curl -u admin:YOUR_PASSWORD http://127.0.0.1:8080/api/alarms/history
+```
+
+`alarms` je `[]`, `"source":"ram"`, `"persistent":false`.
+
+To je důkaz, že historie měření ani alarmů nebyla na kartě.

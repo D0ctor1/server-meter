@@ -156,7 +156,7 @@ V `production`:
 | `api_docs_enabled` | `/docs`, `/redoc`, `/openapi.json` | `false` |
 | `health_public` | `/api/health` bez hesla | `true` |
 | `max_request_bytes` | limit Content-Length | `16384` |
-| `users_db` | SQLite soubor s účty, historií alarmů a monitoring tokenem (ne historie měření) | `/var/lib/server-meter/users.db` |
+| `users_db` | SQLite soubor s účty a monitoring tokenem (ne historie měření ani alarmů) | `/var/lib/server-meter/users.db` |
 | `auth.enabled` | HTTP Basic Auth | `true` |
 | `auth.username` | uživatel | `admin` |
 | `auth.password` | heslo (jen YAML, ne zdrojáky) | `CHANGE_ME` |

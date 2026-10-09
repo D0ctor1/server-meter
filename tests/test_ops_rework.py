@@ -96,10 +96,14 @@ def test_alarm_history_records_state_changes(tmp_path, auth):
     service.notifier.set_history(client.app.state.users.alarms)
     with client:
         service.notifier.observe(_sample(temperature=52.0), _system(), SensorStatus.OK, 1.0)
-        rows = client.get("/api/alarms/history", auth=auth).json()["alarms"]
+        payload = client.get("/api/alarms/history", auth=auth).json()
+        assert payload["persistent"] is False
+        assert payload["source"] == "ram"
+        rows = payload["alarms"]
         assert rows
-        assert rows[0]["kind"] in {"WARNING", "CRITICAL"}
-        assert rows[0]["metric"] == "temperature"
+        kinds = {row["kind"] for row in rows}
+        assert kinds & {"WARNING", "CRITICAL"}
+        assert any(row["metric"] == "temperature" for row in rows)
         assert "password" not in str(rows).lower()
         blob = client.get("/api/admin/export", auth=auth).text.lower()
         assert "sm_" not in blob or "redacted" in blob

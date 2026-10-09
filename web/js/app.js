@@ -73,9 +73,18 @@
   }
 
   function stateClass(kind) {
-    if (kind === "ok" || kind === "healthy" || kind === "online") return "state-ok";
+    if (kind === "ok" || kind === "healthy" || kind === "online" || kind === "recovery" || kind === "email_ok") {
+      return "state-ok";
+    }
     if (kind === "warning" || kind === "degraded") return "state-warn";
-    if (kind === "critical" || kind === "failed" || kind === "unavailable" || kind === "error" || kind === "unreachable") {
+    if (
+      kind === "critical"
+      || kind === "failed"
+      || kind === "unavailable"
+      || kind === "error"
+      || kind === "unreachable"
+      || kind === "email_fail"
+    ) {
       return "state-crit";
     }
     return "state-unknown";
@@ -399,7 +408,7 @@
       time.textContent = localTime(row.created_at);
       const kind = document.createElement("td");
       kind.textContent = row.kind;
-      kind.className = stateClass(String(row.kind).toLowerCase() === "recovery" ? "ok" : String(row.kind).toLowerCase());
+      kind.className = stateClass(String(row.kind).toLowerCase());
       const metric = document.createElement("td");
       const key = `settings.metric.${row.metric}`;
       metric.textContent = t(key) === key ? row.metric : t(key);
@@ -597,7 +606,7 @@
   async function pollAlarmHistory() {
     try {
       const payload = await getJson("/api/alarms/history?limit=50");
-      renderAlarmHistory(payload.alarms || []);
+      renderAlarmHistory(Array.isArray(payload.alarms) ? payload.alarms : []);
     } catch (_err) {
       // History table is optional; dashboard values still update.
     }

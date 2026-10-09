@@ -1,7 +1,7 @@
-"""SQLite extras on the user database: alarm history and monitoring tokens.
+"""SQLite extras on the user database: monitoring tokens only.
 
-Sensor samples stay in RAM. This module never stores passwords, SMTP
-credentials, hashes, or session material in alarm rows.
+Sensor samples and alarm/notification history stay in RAM. This module never
+stores passwords, SMTP credentials, or alarm events.
 """
 
 from __future__ import annotations
@@ -11,30 +11,14 @@ import secrets
 import sqlite3
 import threading
 import time
-from dataclasses import dataclass
 from typing import Any
 
 from argon2.exceptions import InvalidHash, VerificationError, VerifyMismatchError
 
 logger = logging.getLogger("server_meter.sqlite_state")
 
-ALARM_MAX_RECORDS = 500
 MONITORING_ROLE = "monitoring"
 MONITORING_USERNAME = "monitoring-token"
-
-_ALARM_SQL = """
-CREATE TABLE IF NOT EXISTS alarm_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    created_at REAL NOT NULL,
-    kind TEXT NOT NULL,
-    metric TEXT NOT NULL,
-    value REAL,
-    unit TEXT NOT NULL DEFAULT '',
-    threshold TEXT NOT NULL DEFAULT '',
-    duration_seconds INTEGER,
-    hostname TEXT NOT NULL DEFAULT ''
-);
-"""
 
 _TOKEN_SQL = """
 CREATE TABLE IF NOT EXISTS monitoring_tokens (
@@ -46,112 +30,6 @@ CREATE TABLE IF NOT EXISTS monitoring_tokens (
     revoked INTEGER NOT NULL DEFAULT 0
 );
 """
-
-_ALARM_INDEX = "CREATE INDEX IF NOT EXISTS alarm_history_created_at ON alarm_history (created_at DESC);"
-
-
-@dataclass(frozen=True)
-class AlarmRecord:
-    id: int
-    created_at: float
-    kind: str
-    metric: str
-    value: float | None
-    unit: str
-    threshold: str
-    duration_seconds: int | None
-    hostname: str
-
-    def public_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "created_at": self.created_at,
-            "kind": self.kind,
-            "metric": self.metric,
-            "value": self.value,
-            "unit": self.unit,
-            "threshold": self.threshold,
-            "duration_seconds": self.duration_seconds,
-            "hostname": self.hostname,
-        }
-
-
-class AlarmHistory:
-    def __init__(self, conn: sqlite3.Connection, lock: threading.Lock, *, max_records: int = ALARM_MAX_RECORDS) -> None:
-        self._conn = conn
-        self._lock = lock
-        self._max_records = max(50, int(max_records))
-
-    def initialize(self) -> None:
-        with self._lock:
-            self._conn.execute(_ALARM_SQL)
-            self._conn.execute(_ALARM_INDEX)
-            self._conn.commit()
-
-    def append(
-        self,
-        *,
-        kind: str,
-        metric: str,
-        value: float | None,
-        unit: str = "",
-        threshold: str = "",
-        duration_seconds: int | None = None,
-        hostname: str = "",
-        created_at: float | None = None,
-    ) -> None:
-        lowered = f"{kind} {metric} {threshold} {hostname}".lower()
-        if any(word in lowered for word in ("password", "token", "smtp", "secret", "hash")):
-            logger.warning("refusing to persist alarm history row that looks like a secret")
-            return
-        kind = str(kind or "")[:32]
-        metric = str(metric or "")[:64]
-        unit = str(unit or "")[:16]
-        threshold = str(threshold or "")[:80]
-        hostname = str(hostname or "")[:128]
-        now = float(created_at if created_at is not None else time.time())
-        with self._lock:
-            self._conn.execute(
-                "INSERT INTO alarm_history "
-                "(created_at, kind, metric, value, unit, threshold, duration_seconds, hostname) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (now, kind, metric, value, unit, threshold, duration_seconds, hostname),
-            )
-            extra = self._conn.execute("SELECT COUNT(*) AS n FROM alarm_history").fetchone()
-            count = int(extra["n"] if extra else 0)
-            overflow = count - self._max_records
-            if overflow > 0:
-                self._conn.execute(
-                    "DELETE FROM alarm_history WHERE id IN ("
-                    "SELECT id FROM alarm_history ORDER BY id ASC LIMIT ?"
-                    ")",
-                    (overflow,),
-                )
-            self._conn.commit()
-
-    def list_recent(self, limit: int = 100) -> list[AlarmRecord]:
-        cap = max(1, min(int(limit), self._max_records))
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT id, created_at, kind, metric, value, unit, threshold, "
-                "duration_seconds, hostname FROM alarm_history "
-                "ORDER BY id DESC LIMIT ?",
-                (cap,),
-            ).fetchall()
-        return [
-            AlarmRecord(
-                id=int(row["id"]),
-                created_at=float(row["created_at"]),
-                kind=str(row["kind"]),
-                metric=str(row["metric"]),
-                value=None if row["value"] is None else float(row["value"]),
-                unit=str(row["unit"] or ""),
-                threshold=str(row["threshold"] or ""),
-                duration_seconds=None if row["duration_seconds"] is None else int(row["duration_seconds"]),
-                hostname=str(row["hostname"] or ""),
-            )
-            for row in rows
-        ]
 
 
 class MonitoringTokens:

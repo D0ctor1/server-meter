@@ -75,6 +75,17 @@ def test_last_activity_never_opens_files():
     assert "dict[int, float]" in text or "_last" in text
 
 
+def test_alarm_history_never_opens_files():
+    text = (SRC / "alarm_history.py").read_text(encoding="utf-8")
+    for token in ("open(", "Path(", "write_text", "json.dump", "sqlite", "csv", "yaml"):
+        assert token not in text
+    assert "deque" in text
+    sqlite_state = (SRC / "sqlite_state.py").read_text(encoding="utf-8")
+    assert "CREATE TABLE IF NOT EXISTS alarm_history" not in sqlite_state
+    assert "INSERT INTO alarm_history" not in sqlite_state
+    assert "FROM alarm_history" not in sqlite_state
+
+
 def test_frontend_never_requests_full_two_million_points():
     app_js = (ROOT / "web" / "js" / "app.js").read_text(encoding="utf-8")
     assert "const MAX_POINTS = 720;" in app_js
