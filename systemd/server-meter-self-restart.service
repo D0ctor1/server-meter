@@ -1,0 +1,9 @@
+[Unit]
+Description=Admin-triggered restart of server-meter
+Documentation=file:///opt/server-meter/README.md
+RefuseManualStop=true
+
+[Service]
+Type=oneshot
+# Hardcoded. Started only via polkit-gated `systemctl start` from the app.
+ExecStart=/usr/bin/systemctl restart server-meter.service

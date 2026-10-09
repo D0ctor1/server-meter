@@ -164,6 +164,7 @@
                 <th data-i18n="users.col.username">Uživatelské jméno</th>
                 <th data-i18n="users.col.role">Role</th>
                 <th data-i18n="users.col.status">Stav</th>
+                <th data-i18n="users.col.last_activity">Poslední aktivita</th>
                 <th data-i18n="users.col.created">Vytvořen</th>
                 <th data-i18n="users.col.actions">Akce</th>
               </tr>
@@ -273,6 +274,21 @@
         <p class="meta" data-i18n="settings.readonly">Pouze ke čtení</p>
         <p id="settings-system-info" class="hint"></p>
         <dl id="settings-system-dl" class="diag-list"></dl>
+        <h2 data-i18n="system.actions">Systémové akce</h2>
+        <div class="system-action-card">
+          <h3 data-i18n="system.restart_service.title">Restartovat službu server-meter</h3>
+          <p class="hint" data-i18n="system.restart_service.hint">Restartuje pouze službu server-meter. Webové rozhraní bude na krátkou dobu nedostupné.</p>
+          <div class="settings-actions">
+            <button type="button" id="restart-service-btn" class="secondary-btn" data-i18n="system.restart_service.button">Restartovat službu</button>
+          </div>
+        </div>
+        <div class="system-action-card system-action-card-danger">
+          <h3 data-i18n="system.reboot_host.title">Restartovat celý hostitel</h3>
+          <p class="hint" data-i18n="system.reboot_host.hint">Restartuje celé Raspberry Pi, ne jen aplikaci. Všechny služby budou dočasně nedostupné.</p>
+          <div class="settings-actions">
+            <button type="button" id="reboot-host-btn" class="danger-btn reboot-host-btn" data-i18n="system.reboot_host.button">Restartovat hostitel</button>
+          </div>
+        </div>
         <h2 data-i18n="settings.diagnostics">Diagnostika</h2>
         <dl id="settings-diag-dl" class="diag-list"></dl>
         <h2 data-i18n="settings.token">Nagios monitoring token</h2>
@@ -336,6 +352,39 @@
       <div class="settings-actions">
         <button type="button" id="user-delete-cancel" class="secondary-btn" data-i18n="users.cancel">Zrušit</button>
         <button type="button" id="user-delete-confirm" class="danger-btn" data-i18n="users.delete">Odstranit</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="restart-service-overlay" class="settings-overlay" hidden>
+    <div class="settings-panel user-dialog" role="alertdialog" aria-labelledby="restart-service-title">
+      <h1 id="restart-service-title" data-i18n="system.restart_service.confirm">Restartovat službu server-meter?</h1>
+      <p class="hint" data-i18n="system.restart_service.confirm_detail">Webové rozhraní bude na krátkou dobu nedostupné. Služba se poté znovu spustí.</p>
+      <div class="settings-actions">
+        <button type="button" id="restart-service-cancel" class="secondary-btn" data-i18n="users.cancel">Zrušit</button>
+        <button type="button" id="restart-service-confirm" class="secondary-btn" data-i18n="system.restart_service.button">Restartovat službu</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="reboot-host-overlay" class="settings-overlay" hidden>
+    <div class="settings-panel user-dialog" role="alertdialog" aria-labelledby="reboot-host-title">
+      <h1 id="reboot-host-title" data-i18n="system.reboot_host.confirm">Restartovat celý hostitel?</h1>
+      <p class="hint" data-i18n="system.reboot_host.confirm_detail">Restartuje se celé Raspberry Pi. Všechny jeho služby budou dočasně nedostupné. Webové rozhraní bude po dobu restartu nedostupné. Neuložené změny mohou být ztraceny.</p>
+      <div class="settings-actions">
+        <button type="button" id="reboot-host-cancel" class="secondary-btn" data-i18n="users.cancel">Zrušit</button>
+        <button type="button" id="reboot-host-continue" class="danger-btn reboot-host-btn" data-i18n="system.reboot_host.confirm_again">Pokračovat</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="reboot-host-final-overlay" class="settings-overlay" hidden>
+    <div class="settings-panel user-dialog" role="alertdialog" aria-labelledby="reboot-host-final-title">
+      <h1 id="reboot-host-final-title" data-i18n="system.reboot_host.final_title">Opravdu restartovat hostitel?</h1>
+      <p class="hint" data-i18n="system.reboot_host.final_detail">Tato akce restartuje celé Raspberry Pi, ne jen službu server-meter.</p>
+      <div class="settings-actions">
+        <button type="button" id="reboot-host-final-cancel" class="secondary-btn" data-i18n="users.cancel">Zrušit</button>
+        <button type="button" id="reboot-host-final-confirm" class="danger-btn reboot-host-btn" data-i18n="system.reboot_host.confirm_button">Ano, restartovat hostitel</button>
       </div>
     </div>
   </div>

@@ -370,6 +370,8 @@ Hlavní vstup je kořenový **`./install.sh`** (wrapper `scripts/install.sh` ho 
 - `chmod 660` a `chown root:server-meter` na YAML (služba musí umět uložit SMTP z webu)
 - ověří `test -r` jako uživatel `server-meter`
 - nainstaluje unit do `/etc/systemd/system/server-meter.service`
+- nainstaluje helper units `server-meter-self-restart.service` a `server-meter-host-reboot.service` (nespínají se po bootu)
+- nainstaluje polkit pravidlo `/etc/polkit-1/rules.d/50-server-meter.rules` (jen `systemctl start` těchto dvou jednotek)
 - `systemctl daemon-reload`, `systemctl enable` a `systemctl start`
 
 ### Proveď

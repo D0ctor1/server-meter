@@ -6,6 +6,8 @@ Skript: `scripts/uninstall.sh`.
 
 - zastaví a disable službu
 - smaže `/etc/systemd/system/server-meter.service`
+- smaže helper units `server-meter-self-restart.service` a `server-meter-host-reboot.service`
+- smaže `/etc/polkit-1/rules.d/50-server-meter.rules`
 - smaže `/opt/server-meter` (kód + venv)
 - **ponechá** `/etc/server-meter` (YAML)
 - **ponechá** `/var/lib/server-meter/users.db` (účty)
@@ -37,6 +39,9 @@ Pokud už `/opt` není k dispozici, ekvivalent skriptu:
 sudo systemctl stop server-meter.service
 sudo systemctl disable server-meter.service
 sudo rm -f /etc/systemd/system/server-meter.service
+sudo rm -f /etc/systemd/system/server-meter-self-restart.service
+sudo rm -f /etc/systemd/system/server-meter-host-reboot.service
+sudo rm -f /etc/polkit-1/rules.d/50-server-meter.rules
 sudo systemctl daemon-reload
 sudo rm -rf /opt/server-meter
 ```

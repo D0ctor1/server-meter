@@ -59,7 +59,12 @@ def build_users_router(auth_dep, admin_dep) -> APIRouter:
         request: Request,
         _admin: AuthUser = Depends(admin_dep),
     ) -> dict[str, Any]:
-        users = [item.public_dict() for item in _store(request).list_users()]
+        tracker = getattr(request.app.state, "activity", None)
+        users = []
+        for item in _store(request).list_users():
+            payload = item.public_dict()
+            payload["last_activity_at"] = tracker.get(item.id) if tracker is not None else None
+            users.append(payload)
         return {"users": users}
 
     @router.post("/api/admin/users")
@@ -91,7 +96,10 @@ def build_users_router(auth_dep, admin_dep) -> APIRouter:
         record = _store(request).get(user_id)
         if record is None:
             return _error(404, "user_not_found", "User not found.")
-        return record.public_dict()
+        payload = record.public_dict()
+        tracker = getattr(request.app.state, "activity", None)
+        payload["last_activity_at"] = tracker.get(record.id) if tracker is not None else None
+        return payload
 
     @router.put("/api/admin/users/{user_id}")
     async def update_user(

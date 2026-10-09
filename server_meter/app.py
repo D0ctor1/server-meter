@@ -13,6 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from server_meter import __version__
+from server_meter.activity import ActivityTracker
 from server_meter.api.auth import require_admin, require_auth
 from server_meter.api.ops import build_ops_router
 from server_meter.api.routes import build_router, json_error
@@ -21,9 +22,10 @@ from server_meter.api.users import build_users_router
 from server_meter.health import liveness_payload
 from server_meter.config import AppConfig
 from server_meter.service import MeterService
+from server_meter.system_actions import SystemActions
 from server_meter.users import UserStore, migrate_yaml_admin, resolve_users_db_path
 
-WEB_ASSET_VERSION = f"{__version__}.ui11"
+WEB_ASSET_VERSION = f"{__version__}.ui12"
 
 
 def resolve_web_root() -> Path:
@@ -94,6 +96,11 @@ def create_app(config: AppConfig, service: MeterService | None = None) -> FastAP
         test=config.application.environment == "test",
     )
     migrate_yaml_admin(app.state.users, config)
+    app.state.activity = ActivityTracker()
+    if config.application.environment == "test":
+        app.state.system_actions = SystemActions(runner=lambda _unit: None)
+    else:
+        app.state.system_actions = SystemActions()
     app.state.service.notifier.set_history(app.state.users.alarms)
     app.add_middleware(SecurityHeadersMiddleware, max_request_bytes=config.web.max_request_bytes)
 
