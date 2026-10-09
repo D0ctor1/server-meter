@@ -23,7 +23,7 @@ Pro nedůvěryhodnou síť nebo vzdálený přístup z internetu použijte **HTT
 | CSRF | Authorization header prohlížeč nepřipojuje na cizí formuláře; cookies se nepoužívají |
 | Logování hesla | kód heslo, hash ani tokeny neloguje |
 
-YAML `web.auth.username` / `web.auth.password` slouží **jen k jednorázové migraci** prvního admina do SQLite. Opakovaný start účet neduplikuje. Přihlášení po migraci bere uživatele z databáze.
+YAML `web.auth.username` / `web.auth.password` slouží **jen k jednorázové migraci** prvního admina do SQLite. Opakovaný start účet neduplikuje. Přihlášení po migraci bere uživatele z databáze. `install.sh` při reinstalaci YAML heslo do SQLite nezapisuje znovu; test `/api/current` ho použije jen když se stále shoduje s existujícím administrátorem.
 
 Nagios plugin dál posílá Basic Auth (stejný admin nebo jiný účet). `/api/monitoring` smí číst `admin` i `user`. Volitelný read-only monitoring token (`Bearer` / `X-Monitoring-Token`) čte **jen** `/api/monitoring` a na `/api/admin/*` dostane **403**. Token je Argon2 hash v SQLite, plaintext se ukáže jednou. Základní Nagios Basic Auth se tím neruší.
 
