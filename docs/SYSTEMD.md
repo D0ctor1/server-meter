@@ -10,6 +10,16 @@ Jednotka v gitu: `systemd/server-meter.service`.
 
 a provede `systemctl daemon-reload` + `systemctl enable`. **Nespouští** `start`.
 
+Administrátorské restartovací akce používají dvě oneshot helper jednotky, které se **neenableují** po bootu:
+
+```text
+/etc/systemd/system/server-meter-self-restart.service
+/etc/systemd/system/server-meter-host-reboot.service
+/etc/polkit-1/rules.d/50-server-meter.rules
+```
+
+Aplikace (uživatel `server-meter`, `NoNewPrivileges=true`) spouští jen `systemctl start` těchto dvou jednotek. Polkit nepovoluje žádný jiný unit ani obecný shell.
+
 ---
 
 ## Co unit skutečně obsahuje

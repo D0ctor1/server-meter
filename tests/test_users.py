@@ -56,6 +56,16 @@ def test_user_cannot_call_admin_endpoints(tmp_path):
         assert client.put("/api/settings", auth=auth, json={"enabled": True}).status_code == 403
         assert client.post("/api/settings/test-email", auth=auth).status_code == 403
         assert client.post(
+            "/api/admin/restart-service",
+            auth=auth,
+            json={"confirm": "restart-service"},
+        ).status_code == 403
+        assert client.post(
+            "/api/admin/reboot-host",
+            auth=auth,
+            json={"confirm": "reboot-host"},
+        ).status_code == 403
+        assert client.post(
             "/api/admin/users",
             auth=auth,
             json={"username": "x", "password": "abcdefgh", "role": "admin"},

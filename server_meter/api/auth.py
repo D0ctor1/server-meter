@@ -12,6 +12,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
+from server_meter.activity import should_record
 from server_meter.config import AppConfig
 from server_meter.sqlite_state import MONITORING_ROLE, MONITORING_USERNAME
 from server_meter.users import ANONYMOUS, AuthUser, UserStore
@@ -69,14 +70,25 @@ def require_auth(config: AppConfig):
                 detail="Invalid credentials",
                 headers={"WWW-Authenticate": "Basic realm=\"server-meter\""},
             )
-        return AuthUser(
+        user = AuthUser(
             id=record.id,
             username=record.username,
             role=record.role,
             enabled=record.enabled,
         )
+        _record_activity(request, user)
+        return user
 
     return dependency
+
+
+def _record_activity(request: Request, user: AuthUser) -> None:
+    if not should_record(request.url.path, user.id):
+        return
+    tracker = getattr(request.app.state, "activity", None)
+    if tracker is None:
+        return
+    tracker.touch(user.id)
 
 
 def require_admin(auth_dep):

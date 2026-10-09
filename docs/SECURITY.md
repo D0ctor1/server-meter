@@ -176,6 +176,13 @@ Z `systemd/server-meter.service`:
 
 `MemoryDenyWriteExecute=false` kvůli načtení BSEC `.so`.
 
+Administrátor může z webu restartovat službu nebo hostitele. Proces `server-meter` **nemá** sudo ani obecný root shell. Smí jen přes polkit spustit:
+
+- `server-meter-self-restart.service` (`systemctl restart server-meter.service`)
+- `server-meter-host-reboot.service` (`systemctl reboot`)
+
+Obě akce vyžadují HTTP Basic Auth a roli `admin` na backendu. Tělo požadavku musí obsahovat přesný `confirm` token; uživatelský vstup se neskládá do příkazové řádky.
+
 ---
 
 ## Firewall (UFW)

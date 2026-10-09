@@ -1,0 +1,21 @@
+// Allow the unprivileged server-meter user to start only two helper units.
+// No general systemd management, no shell, no other units.
+polkit.addRule(function (action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units") {
+        return;
+    }
+    if (subject.user !== "server-meter") {
+        return;
+    }
+    var unit = action.lookup("unit");
+    var verb = action.lookup("verb");
+    if (verb !== "start") {
+        return;
+    }
+    if (
+        unit === "server-meter-self-restart.service" ||
+        unit === "server-meter-host-reboot.service"
+    ) {
+        return polkit.Result.YES;
+    }
+});

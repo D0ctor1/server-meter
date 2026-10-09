@@ -52,8 +52,12 @@ systemctl stop server-meter.service 2>/dev/null || true
 systemctl disable server-meter.service 2>/dev/null || true
 systemctl disable server-meter-install-resume.service 2>/dev/null || true
 rm -f /etc/systemd/system/server-meter.service
+rm -f /etc/systemd/system/server-meter-self-restart.service
+rm -f /etc/systemd/system/server-meter-host-reboot.service
 rm -f /etc/systemd/system/server-meter-install-resume.service
+rm -f /etc/polkit-1/rules.d/50-server-meter.rules
 systemctl daemon-reload
+systemctl reload polkit 2>/dev/null || systemctl try-reload-or-restart polkit 2>/dev/null || true
 
 rm -rf "${PREFIX}"
 rm -f /var/lib/server-meter/install-resume

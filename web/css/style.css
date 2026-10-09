@@ -366,6 +366,26 @@ select {
   padding: 6px 10px;
   cursor: pointer;
 }
+.system-action-card {
+  background: linear-gradient(180deg, var(--panel), var(--panel-2));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: 12px 0;
+}
+.system-action-card h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+.system-action-card .hint { margin: 0 0 12px; }
+.system-action-card-danger {
+  border-color: var(--crit);
+  background: linear-gradient(180deg, rgba(255, 107, 107, 0.08), var(--panel-2));
+}
+.reboot-host-btn {
+  background: rgba(255, 107, 107, 0.16);
+  font-weight: 650;
+}
 .user-dialog {
   width: min(480px, 100%);
   display: flex;

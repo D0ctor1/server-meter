@@ -42,6 +42,8 @@ Statické, spravované operátorem. Aplikace to za běhu **nepřepisuje**:
 | YAML konfigurace (včetně SMTP) | `/etc/server-meter/config.yaml` |
 | SQLite uživatelské účty, historie alarmů, monitoring token | `/var/lib/server-meter/users.db` (ne historie měření) |
 | systemd unit | `/etc/systemd/system/server-meter.service` |
+| helper units (restart/reboot) | `/etc/systemd/system/server-meter-self-restart.service`, `/etc/systemd/system/server-meter-host-reboot.service` |
+| polkit rule | `/etc/polkit-1/rules.d/50-server-meter.rules` |
 | BSEC `.so` (volitelně) | `/opt/server-meter/lib/libalgobsec.so` |
 | Dokumentace | `/opt/server-meter/docs/` |
 
@@ -60,6 +62,7 @@ Zápis na SD probíhá při **instalaci / upgradu / uložení Settings (SMTP/pra
 | memory pressure | `MemoryProtector` | vynulované |
 | CPU usage delta | `SystemMonitor._prev_cpu` | vynulované |
 | stav alarmu / e-mailová fronta | `NotificationEngine` | vynulované (historie alarmů je v SQLite, bez hesel) |
+| poslední aktivita uživatelů | `ActivityTracker` (dict v RAM) | **prázdné** („Nikdy“ / „Never“) |
 
 BSEC `persist_state: true` konfigurace **odmítne** (`ConfigError`). Wrapper **nevolá** `bsec_get_state`.
 

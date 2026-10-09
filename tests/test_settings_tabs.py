@@ -92,7 +92,13 @@ def test_settings_fields_are_not_duplicated_across_sections():
     assert 'id="threshold-body"' in panels["alarms"]
     assert 'id="threshold-body"' not in panels["smtp"]
     assert 'id="users-body"' in panels["users"]
+    assert "users.col.last_activity" in panels["users"]
     assert 'id="settings-system-dl"' in panels["system"]
+    assert 'id="restart-service-btn"' in panels["system"]
+    assert 'id="reboot-host-btn"' in panels["system"]
+    assert "system-action-card-danger" in panels["system"]
+    assert 'id="restart-service-btn"' not in panels["users"]
+    assert 'id="reboot-host-btn"' not in panels["smtp"]
     assert "settings.readonly" in panels["general"]
     assert "settings.readonly" in panels["system"]
 
@@ -128,6 +134,12 @@ def test_tab_labels_are_localized():
     assert en["settings.tab.alarms"] == "Alarms"
     assert cz["settings.readonly"] == "Pouze ke čtení"
     assert en["settings.readonly"] == "Read-only"
+    assert cz["users.col.last_activity"] == "Poslední aktivita"
+    assert en["users.col.last_activity"] == "Last activity"
+    assert cz["users.never"] == "Nikdy"
+    assert en["users.never"] == "Never"
+    assert cz["system.actions"] == "Systémové akce"
+    assert en["system.actions"] == "System actions"
     assert cz["settings.saved"].startswith("✓")
     assert en["settings.saved"].startswith("✓")
     assert cz["settings.save_failed"].startswith("✗")
@@ -170,6 +182,16 @@ def test_user_cannot_read_settings_apis(tmp_path):
         assert client.get("/api/admin/users", auth=user).status_code == 403
         assert client.get("/api/admin/system", auth=user).status_code == 403
         assert client.post("/api/settings/test-email", auth=user).status_code == 403
+        assert client.post(
+            "/api/admin/restart-service",
+            auth=user,
+            json={"confirm": "restart-service"},
+        ).status_code == 403
+        assert client.post(
+            "/api/admin/reboot-host",
+            auth=user,
+            json={"confirm": "reboot-host"},
+        ).status_code == 403
         assert client.get("/api/settings").status_code == 401
 
 

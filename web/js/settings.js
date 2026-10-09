@@ -284,6 +284,10 @@
       closeUserForm();
       closeDeleteUser();
     }
+    if (section !== "system") {
+      closeRestartService();
+      closeRebootHost();
+    }
     return section;
   }
 
@@ -375,7 +379,11 @@
       (data.users || []).forEach((user) => {
         const row = document.createElement("tr");
         const created = user.created_at ? i18n.formatDateTimeFromTs(user.created_at) : "—";
+        const activity = user.last_activity_at
+          ? i18n.formatDateTimeFromTs(user.last_activity_at)
+          : t("users.never");
         row.innerHTML = `
+          <td></td>
           <td></td>
           <td></td>
           <td></td>
@@ -385,19 +393,20 @@
         row.children[0].textContent = user.username;
         row.children[1].textContent = roleLabel(user.role);
         row.children[2].textContent = statusLabel(user.enabled);
-        row.children[3].textContent = created;
+        row.children[3].textContent = activity;
+        row.children[4].textContent = created;
         const edit = document.createElement("button");
         edit.type = "button";
         edit.className = "secondary-btn";
         edit.textContent = t("users.edit");
         edit.addEventListener("click", () => openUserForm(user));
-        row.children[4].appendChild(edit);
+        row.children[5].appendChild(edit);
         const del = document.createElement("button");
         del.type = "button";
         del.className = "danger-btn";
         del.textContent = t("users.delete");
         del.addEventListener("click", () => openDeleteUser(user));
-        row.children[4].appendChild(del);
+        row.children[5].appendChild(del);
         body.appendChild(row);
       });
     } catch (err) {
@@ -455,6 +464,94 @@
     const overlay = $("user-delete-overlay");
     if (overlay) overlay.hidden = true;
     deletingUser = null;
+  }
+
+  function overlayVisible(id) {
+    const node = $(id);
+    return !!(node && !node.hidden);
+  }
+
+  function closeRestartService() {
+    const overlay = $("restart-service-overlay");
+    if (overlay) overlay.hidden = true;
+  }
+
+  function openRestartService() {
+    if (currentSection !== "system") return;
+    const overlay = $("restart-service-overlay");
+    if (!overlay) return;
+    overlay.hidden = false;
+    i18n.apply(overlay);
+  }
+
+  function closeRebootHost() {
+    const first = $("reboot-host-overlay");
+    const second = $("reboot-host-final-overlay");
+    if (first) first.hidden = true;
+    if (second) second.hidden = true;
+  }
+
+  function openRebootHost() {
+    if (currentSection !== "system") return;
+    closeRebootHost();
+    const overlay = $("reboot-host-overlay");
+    if (!overlay) return;
+    overlay.hidden = false;
+    i18n.apply(overlay);
+  }
+
+  function openRebootHostFinal() {
+    const first = $("reboot-host-overlay");
+    if (first) first.hidden = true;
+    const overlay = $("reboot-host-final-overlay");
+    if (!overlay) return;
+    overlay.hidden = false;
+    i18n.apply(overlay);
+  }
+
+  function isDisconnectError(err) {
+    if (!err) return false;
+    if (err.name === "TypeError" || err.name === "AbortError") return true;
+    const code = Number(err.code);
+    return code === 502 || code === 503 || code === 504;
+  }
+
+  async function postSystemAction(url, confirm) {
+    return requestJson(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm }),
+    });
+  }
+
+  async function onRestartServiceConfirm() {
+    try {
+      await postSystemAction("/api/admin/restart-service", "restart-service");
+      closeRestartService();
+      setStatus(t("system.restart_service.accepted"), "state-warn");
+    } catch (err) {
+      closeRestartService();
+      if (isDisconnectError(err)) {
+        setStatus(t("system.restart_service.interrupted"), "state-warn");
+        return;
+      }
+      setStatus(err.message || t("system.restart_service.failed"), "state-crit");
+    }
+  }
+
+  async function onRebootHostFinalConfirm() {
+    try {
+      await postSystemAction("/api/admin/reboot-host", "reboot-host");
+      closeRebootHost();
+      setStatus(t("system.reboot_host.accepted"), "state-warn");
+    } catch (err) {
+      closeRebootHost();
+      if (isDisconnectError(err)) {
+        setStatus(t("system.reboot_host.interrupted"), "state-warn");
+        return;
+      }
+      setStatus(err.message || t("system.reboot_host.failed"), "state-crit");
+    }
   }
 
   async function onUserSave(event) {
@@ -692,6 +789,8 @@
     if ($("smtp-password")) $("smtp-password").value = "";
     closeUserForm();
     closeDeleteUser();
+    closeRestartService();
+    closeRebootHost();
     if (currentPathname() === SETTINGS_PATH && window.history && window.history.pushState) {
       syncingHash = true;
       try {
@@ -748,6 +847,8 @@
       if (overlay) overlay.hidden = true;
       closeUserForm();
       closeDeleteUser();
+      closeRestartService();
+      closeRebootHost();
     }
   }
 
@@ -782,8 +883,43 @@
     $("user-delete-overlay").addEventListener("click", (event) => {
       if (event.target === $("user-delete-overlay")) closeDeleteUser();
     });
+    if ($("restart-service-btn")) $("restart-service-btn").addEventListener("click", openRestartService);
+    if ($("restart-service-cancel")) $("restart-service-cancel").addEventListener("click", closeRestartService);
+    if ($("restart-service-confirm")) $("restart-service-confirm").addEventListener("click", onRestartServiceConfirm);
+    if ($("restart-service-overlay")) {
+      $("restart-service-overlay").addEventListener("click", (event) => {
+        if (event.target === $("restart-service-overlay")) closeRestartService();
+      });
+    }
+    if ($("reboot-host-btn")) $("reboot-host-btn").addEventListener("click", openRebootHost);
+    if ($("reboot-host-cancel")) $("reboot-host-cancel").addEventListener("click", closeRebootHost);
+    if ($("reboot-host-continue")) $("reboot-host-continue").addEventListener("click", openRebootHostFinal);
+    if ($("reboot-host-overlay")) {
+      $("reboot-host-overlay").addEventListener("click", (event) => {
+        if (event.target === $("reboot-host-overlay")) closeRebootHost();
+      });
+    }
+    if ($("reboot-host-final-cancel")) $("reboot-host-final-cancel").addEventListener("click", closeRebootHost);
+    if ($("reboot-host-final-confirm")) $("reboot-host-final-confirm").addEventListener("click", onRebootHostFinalConfirm);
+    if ($("reboot-host-final-overlay")) {
+      $("reboot-host-final-overlay").addEventListener("click", (event) => {
+        if (event.target === $("reboot-host-final-overlay")) closeRebootHost();
+      });
+    }
     document.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") return;
+      if (overlayVisible("reboot-host-final-overlay")) {
+        closeRebootHost();
+        return;
+      }
+      if (overlayVisible("reboot-host-overlay")) {
+        closeRebootHost();
+        return;
+      }
+      if (overlayVisible("restart-service-overlay")) {
+        closeRestartService();
+        return;
+      }
       if ($("user-delete-overlay") && !$("user-delete-overlay").hidden) {
         closeDeleteUser();
         return;

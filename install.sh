@@ -514,8 +514,17 @@ install_systemd_extras() {
   fi
   install -m 0644 "${PREFIX}/systemd/server-meter.service" \
     /etc/systemd/system/server-meter.service
+  install -m 0644 "${PREFIX}/systemd/server-meter-self-restart.service" \
+    /etc/systemd/system/server-meter-self-restart.service
+  install -m 0644 "${PREFIX}/systemd/server-meter-host-reboot.service" \
+    /etc/systemd/system/server-meter-host-reboot.service
+  mkdir -p /etc/polkit-1/rules.d
+  install -m 0644 "${PREFIX}/systemd/50-server-meter.rules" \
+    /etc/polkit-1/rules.d/50-server-meter.rules
   systemctl daemon-reload
   systemctl enable server-meter.service
+  # Helper units are started on demand; never enable them for boot.
+  systemctl reload polkit 2>/dev/null || systemctl try-reload-or-restart polkit 2>/dev/null || true
   if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q 'Status: active'; then
     local cidr
     for cidr in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16; do

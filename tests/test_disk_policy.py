@@ -68,6 +68,13 @@ def test_ram_buffer_never_opens_files():
         assert token not in text
 
 
+def test_last_activity_never_opens_files():
+    text = (SRC / "activity.py").read_text(encoding="utf-8")
+    for token in ("open(", "Path(", "write_text", "json.dump", "sqlite", "csv", "yaml"):
+        assert token not in text
+    assert "dict[int, float]" in text or "_last" in text
+
+
 def test_frontend_never_requests_full_two_million_points():
     app_js = (ROOT / "web" / "js" / "app.js").read_text(encoding="utf-8")
     assert "const MAX_POINTS = 720;" in app_js
